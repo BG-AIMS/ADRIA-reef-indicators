@@ -1,0 +1,5 @@
+[deps]
+ADRIA = "7dc409a7-fbe5-4c9d-b3e2-b0c19a6ba600"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+DynamicCoralCoverModel = "f00a6e10-004a-11ef-3676-67ec635bc1a2"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
