@@ -8,7 +8,7 @@ using DataFrames, Statistics
 
 using ADRIA, CoralBlox
 
-include("functions.jl")
+include("src/common.jl")
 
 rs = ADRIA.load_results("outputs/ADRIA-out/ReefMod Engine__RCPs_45__2024-06-19_10_58_55_647")
 
@@ -27,13 +27,6 @@ tac_sites = mapslices(median, tac, dims=[:scenarios])
 #df = DataFrame(tac_sites.data, collect(getAxis("sites", tac_sites).val))
 #CSV.write("outputs/tac_site_series_19_06_2024_depth_new.csv", df)
 df = CSV.read("outputs/tac_site_series_19_06_2024_depth_new.csv", DataFrame)
-
-# ##
-# n_clusters = 5
-# clusters = ADRIA.analysis.cluster_scenarios(tac_site_series, n_clusters)
-# tac_sites = ADRIA.metrics.per_loc(median, tac)
-# tsc_map_fig = ADRIA.viz.map(rs, tac_sites, clusters)
-# ##
 
 function relative_site_cover(x)
     init = x[1]
