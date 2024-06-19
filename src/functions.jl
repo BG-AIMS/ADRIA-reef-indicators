@@ -141,7 +141,44 @@ function plot_map(gdf::Union{DataFrame,DataFrameRow}, color_by::Symbol; geom_col
     return f, ga
 end
 
-function plot_lines(df::DataFrame, color_by::Symbol, y_start_col, y_end_col, x_lab::String, y_lab::String)
+function colorscheme_alpha(cscheme::ColorScheme, alpha = 0.5)
+    ncolors = length(cscheme)
+
+    return ColorScheme([RGBA(get(cscheme, k), alpha) for k in range(0, 1, length=ncolors)])
+end
+
+"""
+    plot_lines(
+    df::DataFrame,
+    color_by::Symbol,
+    y_start_col,
+    y_end_col,
+    x_lab::String,
+    y_lab::String,
+    alpha=1
+    )
+
+Convenience plot function for plotting timeseries lines with categorical colours.
+
+# Arguments
+- `df` : DataFrame with wide format (each unique line {reef} in a plot occupies it's own row in df)
+- `color_by` : Column name holding factor to color reefs by (e.g. :management_area)
+- `y_start_col` : Column name holding the first timepoint of the series (often 1 or 2)
+- `y_end_col` : Column name holding the last timepoint of the series (often 79)
+- `x_lab` : Label for X Axis
+- `y_lab` : Label for Y Axis
+- `alpha` : Alpha value for transparency (0-1)
+"""
+function plot_lines(
+    df::DataFrame,
+    color_by::Symbol,
+    y_start_col,
+    y_end_col,
+    x_lab::String,
+    y_lab::String,
+    alpha=1
+    )
+
     f = Figure()
     ax = Axis(f[1,1]; xlabel=x_lab, ylabel=y_lab)
 
@@ -149,12 +186,14 @@ function plot_lines(df::DataFrame, color_by::Symbol, y_start_col, y_end_col, x_l
     # Use a different color palette for factors with high numbers of levels
     # (this palette is not as good for visualisation).
     if size(unique(df[:, color_by]),1) <= 20
+        alph_palette = colorscheme_alpha(ColorSchemes.tableau_20, alpha)
         palette = ColorSchemes.tableau_20.colors
     else
+        alph_palette = colorscheme_alpha(ColorSchemes.flag_ec, alpha)
         palette = ColorSchemes.flag_ec.colors
     end
 
-    color_indices = groupindices(groupby(df, color_by))
+    color_indices = groupindices(DataFrames.groupby(df, color_by))
     color_names = unique(DataFrame(indices=color_indices, names=df[:, color_by]))
 
     # Create the unique legend entries for each level of color_by
@@ -166,7 +205,7 @@ function plot_lines(df::DataFrame, color_by::Symbol, y_start_col, y_end_col, x_l
         push!(legend_entries, [LE])
     end
 
-    lines = series!(ax, Matrix(DataFrames.select(df, Between(Symbol(y_start_col), Symbol(y_end_col)))), color=palette[color_indices])
+    lines = series!(ax, Matrix(DataFrames.select(df, DataFrames.Between(Symbol(y_start_col), Symbol(y_end_col)))), color=alph_palette[color_indices])
 
     Legend(f[2, 1], legend_entries, unique_names, nbanks=3, tellheight=true,
     tellwidth=false, orientation=:horizontal, labelsize=10)
