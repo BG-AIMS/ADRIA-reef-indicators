@@ -28,15 +28,6 @@ tac_sites = mapslices(median, tac, dims=[:scenarios])
 #CSV.write("outputs/tac_site_series_19_06_2024_depth_new.csv", df)
 df = CSV.read("outputs/tac_site_series_19_06_2024_depth_new.csv", DataFrame)
 
-function relative_site_cover(x)
-    init = x[1]
-    for (index, step) in enumerate(x)
-        x[index] = x[index]/init
-    end
-
-    return x
-end
-
 rel_cover = mapcols(relative_site_cover, df[2:79,:])
 rel_cover.year = [string(i+1) for i in 1:size(rel_cover,1)]
 select!(rel_cover, :year, Not(:year))
