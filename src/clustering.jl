@@ -43,9 +43,11 @@ FN_reefs = context_layers[(context_layers.management_area .== "Far Northern Mana
 FN_rel_cover = rel_cover[:,rel_cover.sites .∈ [FN_reefs]]
 
 FN_clusters = ADRIA.analysis.cluster_series(FN_rel_cover, n_clusters)
-ADRIA.viz.clustered_scenarios(
+f = ADRIA.viz.clustered_scenarios(
     FN_rel_cover, FN_clusters; fig_opts=fig_opts, axis_opts=Dict(:ylabel => "Far Northern Clustered Proportion of Initial Cover")
 )
+save("figs/initial_FN_clusters.png", f)
+
 series!(FN_rel_cover.data', solid_color=:black)
 
 
@@ -54,9 +56,11 @@ CC_reefs = context_layers[(context_layers.management_area .== "Cairns/Cooktown M
 CC_rel_cover = rel_cover[:,rel_cover.sites .∈ [CC_reefs]]
 
 CC_clusters = ADRIA.analysis.cluster_series(CC_rel_cover, n_clusters)
-ADRIA.viz.clustered_scenarios(
+f = ADRIA.viz.clustered_scenarios(
     CC_rel_cover, CC_clusters; fig_opts=fig_opts, axis_opts=Dict(:ylabel => "Cairns/Cooktown Clustered Proportion of Initial Cover")
 )
+save("figs/initial_CC_clusters.png", f)
+
 series!(CC_rel_cover.data', solid_color=:black)
 
 
@@ -65,9 +69,11 @@ TSV_reefs = context_layers[(context_layers.management_area .== "Townsville/Whits
 TSV_rel_cover = rel_cover[:,rel_cover.sites .∈ [TSV_reefs]]
 
 TSV_clusters = ADRIA.analysis.cluster_series(TSV_rel_cover, n_clusters)
-ADRIA.viz.clustered_scenarios(
+f= ADRIA.viz.clustered_scenarios(
     TSV_rel_cover, TSV_clusters; fig_opts=fig_opts, axis_opts=Dict(:ylabel => "Townsville/Whitsunday Clustered Proportion of Initial Cover")
 )
+save("figs/initial_TSV_clusters.png", f)
+
 series!(TSV_rel_cover.data', solid_color=:black)
 
 
@@ -76,9 +82,63 @@ MCap_reefs = context_layers[(context_layers.management_area .== "Mackay/Capricor
 MCap_rel_cover = rel_cover[:,rel_cover.sites .∈ [MCap_reefs]]
 
 MCap_clusters = ADRIA.analysis.cluster_series(MCap_rel_cover, n_clusters)
-ADRIA.viz.clustered_scenarios(
+f= ADRIA.viz.clustered_scenarios(
     MCap_rel_cover, MCap_clusters; fig_opts=fig_opts, axis_opts=Dict(:ylabel => "Mackay/Capricorn Clustered Proportion of Initial Cover")
 )
+save("figs/initial_MCap_clusters.png", f)
+
 series!(MCap_rel_cover.data', solid_color=:black)
 
-ADRIA.viz.explore(rs)
+#ADRIA.viz.explore(rs)
+
+
+using LinearAlgebra
+numone, numtwo = [2,3,4,5], [1,2,3,4]
+x, y = numone[1:end-1], numtwo[2:end]
+
+ra = dot(x,y)/sqrt(dot(numone,numone)*dot(numtwo,numtwo)) # what crosscor does
+
+rb = dot(x,y)/sqrt(dot(x,x)*dot(y,y)) # what you expect
+
+"""
+    cross_correlation()
+
+Function to calculate the normalised cross correlation of two vectors x and y for applying lags
+to y vector. I think
+
+
+# Arguments
+
+
+# Returns
+
+"""
+function cross_correlation(x::AbstractVector{<:Real}, y::AbstractVector{<:Real}, lags::AbstractVector{<:Integer}; demean::Bool=true)
+   r = Vector{Float64}()
+   lx = length(x)
+   # m = length(lags)
+   # (length(y) == lx && length(r) == m) || throw(DimensionMismatch())
+   # check_lags(lx, lags)
+
+   T = typeof(zero(eltype(x)) / 1)
+   zx::Vector{T} = demean ? x .- mean(x) : x
+   S = typeof(zero(eltype(y)) / 1)
+   zy::Vector{S} = demean ? y .- mean(y) : y
+
+   for k = 1 : m  # foreach lag value
+       l = lags[k]
+
+       if l >= 0
+           zx = zx[1:lx-l]
+           zy = zy[1+l:lx]
+       else
+           zx = zx[1-l:lx]
+           zy = zy[1:lx+l]
+       end
+
+       sc = sqrt(dot(zx, zx) * dot(zy, zy))
+
+       r[k] = dot(zx, zy) / sc
+   end
+   return r
+end
