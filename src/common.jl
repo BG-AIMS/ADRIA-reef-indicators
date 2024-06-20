@@ -359,3 +359,12 @@ function find_latest_file(
 
     return latest
 end
+
+function relative_site_cover(x)
+    init = x[1]
+    for (index, step) in enumerate(x)
+        x[index] = x[index]/init
+    end
+
+    return x
+end
