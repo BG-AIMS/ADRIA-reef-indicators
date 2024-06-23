@@ -3,7 +3,8 @@ using Glob
 using
     CSV,
     Dates,
-    DataFrames
+    DataFrames,
+    YAXArrays
 
 using
     ColorSchemes,
@@ -12,7 +13,8 @@ using
 
 using
     Statistics,
-    Bootstrap
+    Bootstrap,
+    LinearAlgebra
 
 import GeoDataFrames as GDF
 import GeoFormatTypes as GFT
@@ -394,7 +396,127 @@ YAXArray after applying function for use in further ADRIA analysis/viz functions
 function mapslices_toFloat64(func, data::YAXArray, dim::Symbol)
     init_array = mapslices(func, data, dims=[dim])
     dat = convert.(Float64, init_array.data)
-    new_array::YAXArray{Float64, 2} = YAXArray(dims(init_array), dat)
+    new_array::YAXArray{Float64} = YAXArray(dims(init_array), dat)
 
     return new_array
+end
+
+"""
+    cross_correlation(
+    x::AbstractVector{<:Real},
+    y::AbstractVector{<:Real},
+    lags::AbstractVector{<:Integer}
+    )
+
+Function to calculate the normalised cross correlation of two vectors x and y with time series
+lags. If `x` is ahead of `y` then a positive lag will result in positive correlation. If `y`
+is ahead of `x`, then a negative lag will result in positive correlation.
+E.g. If testing for x reef to be ahead of y reef, test for correlation at positive lag.
+
+Based on StatsBase https://github.com/JuliaStats/StatsBase.jl/blob/60fb5cd400c31d75efd5cdb7e4edd5088d4b1229/src/signalcorr.jl#L400
+and https://paulbourke.net/miscellaneous/correlate/
+
+# Arguments
+- `x` : Vector of interest to test for being ahead or behind `y`
+- `y` : Vector to test lags of `x` against
+- `lags` : Vector of lags to apply to vector. Positive lags test for `x` leading `y`, negative lags test for `y` leading `x`.
+
+# Returns
+`r` : Vector of correlation values for each lag in `lags`.
+"""
+function cross_correlation(
+    x::AbstractVector{<:Real},
+    y::AbstractVector{<:Real},
+    lags::AbstractVector{<:Integer}
+    )
+
+    r = Vector{Float64}()
+    lx = length(x)
+    m = length(lags)
+
+    zx::Vector{Float64} = x
+    zy::Vector{Float64} = y
+
+    for k = 1 : m  # foreach lag value
+        l = lags[k]
+
+        if l >= 0
+           sub_x = zx[1:lx-l]
+           sub_y = zy[1+l:lx]
+        else
+           sub_x = zx[1-l:lx]
+           sub_y = zy[1:lx+l]
+        end
+
+        sc = sqrt(dot(sub_x, sub_x) * dot(sub_y, sub_y))
+
+        push!(r, dot(sub_x, sub_y) / sc)
+    end
+
+   return r
+end
+
+"""
+    cross_correlation(
+    x::AbstractVector{<:Real},
+    y::AbstractVector{<:Real},
+    lags::AbstractVector{<:Integer},
+    demean::Bool
+    )
+
+Function to calculate the normalised cross correlation of two vectors x and y with time series
+lags. If `x` is ahead of `y` then a positive lag will result in positive correlation. If `y`
+is ahead of `x`, then a negative lag will result in positive correlation.
+E.g. If testing for x reef to be ahead of y reef, test for correlation at positive lag.
+
+Based on StatsBase https://github.com/JuliaStats/StatsBase.jl/blob/60fb5cd400c31d75efd5cdb7e4edd5088d4b1229/src/signalcorr.jl#L400
+and https://paulbourke.net/miscellaneous/correlate/
+
+# Arguments
+- `x` : Vector of interest to test for being ahead or behind `y`
+- `y` : Vector to test lags of `x` against
+- `lags` : Vector of lags to apply to vector. Positive lags test for `x` leading `y`, negative lags test for `y` leading `x`.
+- `demean` : Subtract the mean of each vector from each element of `x` and `y`. If demean is intended include it as true, otherwise do not include `demean` argument.
+
+# Returns
+`r` : Vector of correlation values for each lag in `lags`.
+"""
+function cross_correlation(
+    x::AbstractVector{<:Real},
+    y::AbstractVector{<:Real},
+    lags::AbstractVector{<:Integer},
+    demean::Bool
+    )
+
+    r = Vector{Float64}()
+    lx = length(x)
+    m = length(lags)
+
+    if demean
+        zx::Vector{T} = x .- mean(x)
+    else
+        throw("`demean` must be true if included. Intended use for applying mean subtraction to `x` and `y`.")
+    end
+
+    if demean
+        zy::Vector{S} = y .- mean(y)
+    end
+
+    for k = 1 : m  # foreach lag value
+        l = lags[k]
+
+        if l >= 0
+           sub_x = zx[1:lx-l]
+           sub_y = zy[1+l:lx]
+        else
+           sub_x = zx[1-l:lx]
+           sub_y = zy[1:lx+l]
+        end
+
+        sc = sqrt(dot(sub_x, sub_x) * dot(sub_y, sub_y))
+
+        push!(r, dot(sub_x, sub_y) / sc)
+    end
+
+   return r
 end
