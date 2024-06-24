@@ -35,5 +35,3 @@ reefs_p9_l7 = gbr_lagged_clusters[(gbr_lagged_clusters.lag7 .>= 0.9), :UNIQUE_ID
 f, ga = plot_map(context_layers, :management_area)
 plot_map!(ga, context_layers[(context_layers.UNIQUE_ID .∈ [reefs_p9_l7]),:], color=:black)
 plot_map(context_layers[(context_layers.UNIQUE_ID .∈ [reefs_p9_l7]), :], :closest_port)
-
-bior_reefs[(bior_reefs .∈ [subr_reefs])]
