@@ -122,7 +122,7 @@ function plot_map(gdf::Union{DataFrame,DataFrameRow}, color_by::Symbol; geom_col
         palette = ColorSchemes.flag_ec.colors
     end
 
-    color_indices = groupindices(groupby(gdf, color_by))
+    color_indices = groupindices(DataFrames.groupby(gdf, color_by))
     names = unique(DataFrame(indices=color_indices, names=gdf[:, color_by]))
 
     # Create the unique legend entries for each level of color_by
@@ -422,7 +422,7 @@ and https://paulbourke.net/miscellaneous/correlate/
 - `lags` : Vector of lags to apply to vector. Positive lags test for `x` leading `y`, negative lags test for `y` leading `x`.
 
 # Returns
-`r` : Vector of correlation values for each lag in `lags`.
+Vector of correlation values for each lag in `lags`.
 """
 function cross_correlation(
     x::AbstractVector{<:Real},
@@ -479,7 +479,7 @@ and https://paulbourke.net/miscellaneous/correlate/
 - `demean` : Subtract the mean of each vector from each element of `x` and `y`. If demean is intended include it as true, otherwise do not include `demean` argument.
 
 # Returns
-`r` : Vector of correlation values for each lag in `lags`.
+Vector of correlation values for each lag in `lags`.
 """
 function cross_correlation(
     x::AbstractVector{<:Real},
@@ -493,13 +493,13 @@ function cross_correlation(
     m = length(lags)
 
     if demean
-        zx::Vector{T} = x .- mean(x)
+        zx::Vector{Float64} = x .- mean(x)
     else
         throw("`demean` must be true if included. Intended use for applying mean subtraction to `x` and `y`.")
     end
 
     if demean
-        zy::Vector{S} = y .- mean(y)
+        zy::Vector{Float64} = y .- mean(y)
     end
 
     for k = 1 : m  # foreach lag value
@@ -558,7 +558,7 @@ function lagged_cluster_analysis(
 
         for (ind, reef) in enumerate(eachcol(target_cluster))
             reef_name = target_cluster.sites[ind]
-            correlation = cross_correlation(reef, cluster_median, lags)
+            correlation = cross_correlation(reef, cluster_median, lags, true)
 
             push!(cross_cor, [reef_name; cluster; correlation])
         end
@@ -601,7 +601,7 @@ function lagged_region_analysis(
 
     for (ind, reef) in enumerate(eachcol(region_rel_cover))
         reef_name = region_rel_cover.sites[ind]
-        correlation = cross_correlation(reef, reg_median, lags)
+        correlation = cross_correlation(reef, reg_median, lags, true)
 
         push!(cross_cor, [reef_name; reg; correlation])
     end
