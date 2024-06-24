@@ -403,9 +403,9 @@ end
 
 """
     cross_correlation(
-    x::AbstractVector{<:Real},
-    y::AbstractVector{<:Real},
-    lags::AbstractVector{<:Integer}
+        x::AbstractVector{<:Real},
+        y::AbstractVector{<:Real},
+        lags::AbstractVector{<:Integer}
     )
 
 Function to calculate the normalised cross correlation of two vectors x and y with time series
@@ -458,10 +458,10 @@ end
 
 """
     cross_correlation(
-    x::AbstractVector{<:Real},
-    y::AbstractVector{<:Real},
-    lags::AbstractVector{<:Integer},
-    demean::Bool
+        x::AbstractVector{<:Real},
+        y::AbstractVector{<:Real},
+        lags::AbstractVector{<:Integer},
+        demean::Bool
     )
 
 Function to calculate the normalised cross correlation of two vectors x and y with time series
@@ -519,4 +519,92 @@ function cross_correlation(
     end
 
    return r
+end
+
+"""
+    lagged_cluster_analysis(
+        region_rel_cover::YAXArray,
+        region_clusters::Vector{Int64},
+        lags::AbstractVector{<:Integer}
+    )::DataFrame
+
+Function to perform lagged cross correlation analysis across a number of clusters for a target
+region. Uses `mapslices_toFloat64()` and `cross_correlation()` functions.
+
+# Arguments
+- `region_rel_cover` : YAXArray of cover trajectories for each reef in the target region.
+- `region_clusters` : Vector of cluster categories assigned to each reef.
+- `lags` : Vector of lags to apply with `cross_correlation()`. Positive lags test for `x` leading `y`, negative lags test for `y` leading `x`.
+
+# Returns
+DataFrame of correlation values for each reef in each cluster with columns for the reef UNIQUE_ID, cluster category and correlation values for each lag step.
+"""
+function lagged_cluster_analysis(
+        region_rel_cover::YAXArray,
+        region_clusters::Vector{Int64},
+        lags::AbstractVector{<:Integer}
+    )::DataFrame
+
+    lags_symbols = [Symbol("lag" * string(lags[a])) for a in eachindex(lags)]
+    cross_cor = DataFrame(
+        [Vector{Any}() for _ in 1:(length(lags)+2)],
+        [:UNIQUE_ID; :t_cluster ; lags_symbols]
+    )
+
+    for cluster in 1:n_clusters
+        target_cluster = region_rel_cover[:, (region_clusters .== cluster)]
+
+        cluster_median = mapslices_toFloat64(median, target_cluster, :sites)
+
+        for (ind, reef) in enumerate(eachcol(target_cluster))
+            reef_name = target_cluster.sites[ind]
+            correlation = cross_correlation(reef, cluster_median, lags)
+
+            push!(cross_cor, [reef_name; cluster; correlation])
+        end
+    end
+
+    return cross_cor
+end
+
+"""
+    lagged_region_analysis(
+        region_rel_cover::YAXArray,
+        reg::String,
+        lags::AbstractVector{<:Integer}
+    )::DataFrame
+
+Function to perform lagged cross correlation analysis across a a target region.
+Uses `mapslices_toFloat64()` and `cross_correlation()` functions.
+
+# Arguments
+- `region_rel_cover` : YAXArray of cover trajectories for each reef in the target region.
+- `reg` : String of region name.
+- `lags` : Vector of lags to apply with `cross_correlation()`. Positive lags test for `x` leading `y`, negative lags test for `y` leading `x`.
+
+# Returns
+DataFrame of correlation values for each reef in target_region with columns for the reef UNIQUE_ID, region and correlation values for each lag step.
+"""
+function lagged_region_analysis(
+        region_rel_cover::YAXArray,
+        reg::String,
+        lags::AbstractVector{<:Integer}
+    )::DataFrame
+
+    lags_symbols = [Symbol("lag" * string(lags[a])) for a in eachindex(lags)]
+    cross_cor = DataFrame(
+        [Vector{Any}() for _ in 1:(length(lags)+2)],
+        [:UNIQUE_ID; :region; lags_symbols]
+    )
+
+    reg_median = mapslices_toFloat64(median, region_rel_cover, :sites)
+
+    for (ind, reef) in enumerate(eachcol(region_rel_cover))
+        reef_name = region_rel_cover.sites[ind]
+        correlation = cross_correlation(reef, reg_median, lags)
+
+        push!(cross_cor, [reef_name; reg; correlation])
+    end
+
+    return cross_cor
 end
