@@ -30,9 +30,9 @@ tac_sites_reduced = tac_sites[timesteps=2:79]
 
 # calculate the relative site cover from the initial cover across timesteps for each reef
 rel_cover = mapslices_toFloat64(relative_site_cover, tac_sites_reduced, :timesteps)
+n_clusters = 5
 
 # Whole - GBR clustering
-n_clusters = 5
 clusters = ADRIA.analysis.cluster_series(rel_cover, n_clusters)
 
 tsc_fig = ADRIA.viz.clustered_scenarios(rel_cover, clusters)
@@ -91,54 +91,12 @@ series!(MCap_rel_cover.data', solid_color=:black)
 
 #ADRIA.viz.explore(rs)
 
+FN_lagged_clusters = lagged_cluster_analysis(FN_rel_cover, FN_clusters, [1, 2, 5, 10])
+CC_lagged_clusters = lagged_cluster_analysis(CC_rel_cover, CC_clusters, [1, 2, 5, 10])
+TSV_lagged_clusters = lagged_cluster_analysis(TSV_rel_cover, TSV_clusters, [1, 2, 5, 10])
+MCap_lagged_clusters = lagged_cluster_analysis(MCap_rel_cover, MCap_clusters, [1, 2, 5, 10])
 
-using LinearAlgebra
-numone, numtwo = [2,3,4,5], [1,2,3,4]
-x, y = numone[1:end-1], numtwo[2:end]
-
-ra = dot(x,y)/sqrt(dot(numone,numone)*dot(numtwo,numtwo)) # what crosscor does
-
-rb = dot(x,y)/sqrt(dot(x,x)*dot(y,y)) # what you expect
-
-"""
-    cross_correlation()
-
-Function to calculate the normalised cross correlation of two vectors x and y for applying lags
-to y vector. I think
-
-
-# Arguments
-
-
-# Returns
-
-"""
-function cross_correlation(x::AbstractVector{<:Real}, y::AbstractVector{<:Real}, lags::AbstractVector{<:Integer}; demean::Bool=true)
-   r = Vector{Float64}()
-   lx = length(x)
-   # m = length(lags)
-   # (length(y) == lx && length(r) == m) || throw(DimensionMismatch())
-   # check_lags(lx, lags)
-
-   T = typeof(zero(eltype(x)) / 1)
-   zx::Vector{T} = demean ? x .- mean(x) : x
-   S = typeof(zero(eltype(y)) / 1)
-   zy::Vector{S} = demean ? y .- mean(y) : y
-
-   for k = 1 : m  # foreach lag value
-       l = lags[k]
-
-       if l >= 0
-           zx = zx[1:lx-l]
-           zy = zy[1+l:lx]
-       else
-           zx = zx[1-l:lx]
-           zy = zy[1:lx+l]
-       end
-
-       sc = sqrt(dot(zx, zx) * dot(zy, zy))
-
-       r[k] = dot(zx, zy) / sc
-   end
-   return r
-end
+FN_lagged_region = lagged_region_analysis(FN_rel_cover, "Far Northern", [1, 2, 5, 10])
+CC_lagged_region = lagged_region_analysis(CC_rel_cover, "Cairns-Cooktown", [1, 2, 5, 10])
+TSV_lagged_region = lagged_region_analysis(TSV_rel_cover, "Townsville-Whitsunday", [1, 2, 5, 10])
+MCap_lagged_region = lagged_region_analysis(MCap_rel_cover, "Mackay-Capricorn", [1, 2, 5, 10])
