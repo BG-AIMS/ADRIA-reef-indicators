@@ -408,7 +408,7 @@ end
         lags::AbstractVector{<:Integer}
     )
 
-Function to calculate the normalised cross correlation of two vectors x and y with time series
+Calculate the normalised cross correlation of two vectors x and y with time series
 lags. If `x` is ahead of `y` then a positive lag will result in positive correlation. If `y`
 is ahead of `x`, then a negative lag will result in positive correlation.
 E.g. If testing for x reef to be ahead of y reef, test for correlation at positive lag.
@@ -464,7 +464,7 @@ end
         demean::Bool
     )
 
-Function to calculate the normalised cross correlation of two vectors x and y with time series
+Calculate the normalised cross correlation of two vectors x and y with time series
 lags. If `x` is ahead of `y` then a positive lag will result in positive correlation. If `y`
 is ahead of `x`, then a negative lag will result in positive correlation.
 E.g. If testing for x reef to be ahead of y reef, test for correlation at positive lag.
@@ -528,7 +528,7 @@ end
         lags::AbstractVector{<:Integer}
     )::DataFrame
 
-Function to perform lagged cross correlation analysis across a number of clusters for a target
+Perform lagged cross correlation analysis across a number of clusters for a target
 region. Uses `mapslices_toFloat64()` and `cross_correlation()` functions.
 
 # Arguments
@@ -574,7 +574,7 @@ end
         lags::AbstractVector{<:Integer}
     )::DataFrame
 
-Function to perform lagged cross correlation analysis across a a target region.
+Perform lagged cross correlation analysis across a a target region.
 Uses `mapslices_toFloat64()` and `cross_correlation()` functions.
 
 # Arguments
