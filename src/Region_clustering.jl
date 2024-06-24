@@ -94,9 +94,11 @@ series!(MCap_rel_cover.data', solid_color=:black)
 FN_lagged_clusters = lagged_cluster_analysis(FN_rel_cover, FN_clusters, [1, 2, 5, 10])
 CC_lagged_clusters = lagged_cluster_analysis(CC_rel_cover, CC_clusters, [1, 2, 5, 10])
 TSV_lagged_clusters = lagged_cluster_analysis(TSV_rel_cover, TSV_clusters, [1, 2, 5, 10])
-MCap_lagged_clusters = lagged_cluster_analysis(MCap_rel_cover, MCap_clusters, [1, 2, 5, 10])
+MCap_lagged_clusters = lagged_cluster_analysis(MCap_rel_cover, MCap_clusters, 5:15)
 
 FN_lagged_region = lagged_region_analysis(FN_rel_cover, "Far Northern", [1, 2, 5, 10])
 CC_lagged_region = lagged_region_analysis(CC_rel_cover, "Cairns-Cooktown", [1, 2, 5, 10])
 TSV_lagged_region = lagged_region_analysis(TSV_rel_cover, "Townsville-Whitsunday", [1, 2, 5, 10])
-MCap_lagged_region = lagged_region_analysis(MCap_rel_cover, "Mackay-Capricorn", [1, 2, 5, 10])
+MCap_lagged_region = lagged_region_analysis(MCap_rel_cover, "Mackay-Capricorn", 5:15)
+
+plot_lines()
