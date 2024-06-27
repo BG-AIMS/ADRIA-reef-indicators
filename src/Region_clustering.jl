@@ -1,3 +1,6 @@
+"""
+Initial GBR wide and management-area scale timeseries clustering approach.
+"""
 using CSV
 
 using GLMakie, GeoMakie, GraphMakie

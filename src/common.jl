@@ -4,7 +4,8 @@ using
     CSV,
     Dates,
     DataFrames,
-    YAXArrays
+    YAXArrays,
+    DimensionalData
 
 using
     ColorSchemes,

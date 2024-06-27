@@ -1,3 +1,7 @@
+"""
+Try finer scale temporal timeseries clustering across the whole gbr spatial scale.
+"""
+
 using YAXArrays, DimensionalData
 
 using DataFrames, Statistics
