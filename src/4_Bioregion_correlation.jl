@@ -1,3 +1,9 @@
+"""
+Perfom lagged correlation analysis across reefs within bioregions. There are ~30 bioregions
+across the reefs in the GBR. This analysis is slightly finer spatial scale than Subregion.
+If 3_Subregion.jl has been run immediately before then the result reefs can be compared.
+"""
+
 using CSV
 
 using GLMakie, GeoMakie, GraphMakie
@@ -51,8 +57,8 @@ end
 
 reefs_bior = lagged_analysis_bior[(lagged_analysis_bior.lag5 .>= 0.9), :UNIQUE_ID]
 f, ga = plot_map(context_layers, :bioregion)
-plot_map!(ga, context_layers[(context_layers.UNIQUE_ID .∈ [reefs_p9_l5]),:], color=:orange)
-plot_map(context_layers[(context_layers.UNIQUE_ID .∈ [reefs_p9_l5]), :], :closest_port)
+plot_map!(ga, context_layers[(context_layers.UNIQUE_ID .∈ [reefs_bior]),:], color=:orange)
+plot_map(context_layers[(context_layers.UNIQUE_ID .∈ [reefs_bior]), :], :closest_port)
 
 target_reefs = reefs_bior[(reefs_bior .∈ [reefs_subr])]
 
