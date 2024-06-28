@@ -47,7 +47,7 @@ for subregion in port_subregions
     lagged_analysis_sub = vcat(lagged_analysis_sub, subregion_lagged_analysis)
 end
 
-reefs_subr = lagged_analysis_sub[(lagged_analysis_sub.lag5 .>= 0.875), :UNIQUE_ID]
+reefs_subr = lagged_analysis_sub[(lagged_analysis_sub.lag6 .>= 0.8), :UNIQUE_ID]
 f, ga = plot_map(context_layers, :closest_port)
 plot_map!(ga, context_layers[(context_layers.UNIQUE_ID .∈ [reefs_subr]),:], color=:black)
 
