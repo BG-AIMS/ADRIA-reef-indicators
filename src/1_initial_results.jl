@@ -39,4 +39,4 @@ rs = ADRIA.run_scenarios(gbr_dom, scens, "45")
 
 # ADRIA.viz.dhw_scenario(gbr_dom, 1)
 # test_dhw = gbr_dom.dhw_scens
-# test_dhw = mapslices_toFloat64(median, test_dhw, :scenarios)
+# test_dhw = Float64.(mapslices(median, test_dhw, :scenarios))

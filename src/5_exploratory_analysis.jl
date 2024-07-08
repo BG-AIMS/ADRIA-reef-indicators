@@ -29,7 +29,7 @@ connectivity_matrix = gbr_dom.conn
 
 # Load initial coral cover data
 initial_cc = gbr_dom.init_coral_cover
-total_icc = mapslices_toFloat64(sum, initial_cc, :species)
+total_icc = Float64.(mapslices(sum, initial_cc, :species))
 
 # species =
 # [
@@ -48,6 +48,12 @@ total_icc = mapslices_toFloat64(sum, initial_cc, :species)
 # icc.spec_groups = spec_groups
 # gdf = DataFrames.groupby(icc, :spec_groups)
 # mapcols(gdf, sum)
+
+# DHW data for sites
+dhw_time_scens = gbr_dom.dhw_scens
+dhw_time = Float64.(mapslices(median, dhw_time_scens, :scenarios))
+dhw_locs = Float64.(mapslices(mean, dhw_time, :timesteps))
+dhw_locs = DataFrame(mean_dhw = dhw_locs.data, GBRMPA_ID = collect(getAxis("locs", dhw_locs).val))
 
 # Calculate the incoming/outgoing connection count/strength/overall source/sink rating of reefs
 reefs = collect(getAxis("Source", connectivity_matrix).val)
@@ -77,6 +83,8 @@ source_to_sink_context.initial_coral_cover = total_icc.data
 source_to_sink_context = dropmissing(source_to_sink_context, :total_comb)
 
 source_to_sink_context = leftjoin(source_to_sink_context, gbr_dom.site_data[:,[:UNIQUE_ID, :area]]; on=:UNIQUE_ID, order=:left)
+
+source_to_sink_context = leftjoin(source_to_sink_context, dhw_locs, on=:GBRMPA_ID, order=:left)
 
 hist(source_to_sink.out_in_strength; bins=[0,0.25,0.5,0.75,1,1.25,1.5,1.75,2,2.25,2.5,2.75,3,3.5,4,5,6])
 vlines!(1, color=:red)
@@ -145,6 +153,7 @@ source_to_sink_context.income_strength .= convert.(Float64, source_to_sink_conte
 filtered_bior_context = source_to_sink_context[source_to_sink_context.bioregion .∈ [unique(target_reefs_context.bioregion)], :]
 filtered_subr_context = source_to_sink_context[source_to_sink_context.closest_port .∈ [unique(target_reefs_context.closest_port)], :]
 
-glm(@formula(target_cat ~ total_comb + initial_coral_cover + area), source_to_sink_context, Binomial(), LogitLink())
-glm(@formula(target_cat ~ total_comb + initial_coral_cover + area), filtered_bior_context, Binomial())
-glm(@formula(target_cat ~ total_comb + initial_coral_cover + area), filtered_subr_context, Binomial())
+glm(@formula(target_cat ~ total_comb + initial_coral_cover + area), source_to_sink_context, Binomial())
+
+glm(@formula(target_cat ~ total_comb + initial_coral_cover + area + mean_dhw), filtered_bior_context, Binomial(); dropcollinear=true)
+glm(@formula(target_cat ~ total_comb + initial_coral_cover + area + mean_dhw), filtered_subr_context, Binomial())

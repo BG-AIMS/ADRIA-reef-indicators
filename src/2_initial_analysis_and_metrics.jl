@@ -12,7 +12,7 @@ using DataFrames, Statistics
 
 using ADRIA, CoralBlox
 
-include("src/common.jl")
+include("common.jl")
 
 rs = ADRIA.load_results("outputs/ADRIA-out/ReefMod Engine__RCPs_45__2024-06-19_10_58_55_647")
 
@@ -24,9 +24,9 @@ s_tac = ADRIA.metrics.scenario_total_cover(rs)
 ADRIA.viz.scenarios(rs, s_tac)
 
 tac = ADRIA.metrics.total_absolute_cover(rs)
-#tac_site_series = ADRIA.metrics.loc_trajectory(median, tac)
+#tac_sites = ADRIA.metrics.loc_trajectory(median, tac)
 
-tac_sites = mapslices(median, tac, dims=[:scenarios])
+tac_sites = Float64.(mapslices(median, tac, dims=[:scenarios]))
 
 #df = DataFrame(tac_sites.data, collect(getAxis("sites", tac_sites).val))
 #CSV.write("outputs/tac_site_series_19_06_2024_depth_new.csv", df)
