@@ -377,30 +377,30 @@ function relative_site_cover(x)
     return x
 end
 
-"""
-    mapslices_toFloat64(func, data::YAXArray, dim::Symbol)
+# """
+#     mapslices_toFloat64(func, data::YAXArray, dim::Symbol)
 
-Apply a function across grouped slices of a YAXArray.
-E.g. To reduce from 3 to 2 dimensions, use a summarising `func` and the dimension to be
-reduced as `dim`.
-E.g. To apply function over timesteps for each reef, use a non-summarising `func` and
-timesteps as `dim`.
+# Apply a function across grouped slices of a YAXArray.
+# E.g. To reduce from 3 to 2 dimensions, use a summarising `func` and the dimension to be
+# reduced as `dim`.
+# E.g. To apply function over timesteps for each reef, use a non-summarising `func` and
+# timesteps as `dim`.
 
-# Arguments
-- `func` : Function to apply to array slices
-- `data` : YAXArray for slicing (2D or 3D)
-- `dim` : Target dimension symbol (if reducing use unwanted dim, if transforming across each series use timesteps)
+# # Arguments
+# - `func` : Function to apply to array slices
+# - `data` : YAXArray for slicing (2D or 3D)
+# - `dim` : Target dimension symbol (if reducing use unwanted dim, if transforming across each series use timesteps)
 
-# Returns
-YAXArray after applying function for use in further ADRIA analysis/viz functions.
-"""
-function mapslices_toFloat64(func, data::YAXArray, dim::Symbol)
-    init_array = mapslices(func, data, dims=[dim])
-    dat = convert.(Float64, init_array.data)
-    new_array::YAXArray{Float64} = YAXArray(dims(init_array), dat)
+# # Returns
+# YAXArray after applying function for use in further ADRIA analysis/viz functions.
+# """
+# function mapslices_toFloat64(func, data::YAXArray, dim::Symbol)
+#     init_array = mapslices(func, data, dims=[dim])
+#     dat = convert.(Float64, init_array.data)
+#     new_array::YAXArray{Float64} = YAXArray(dims(init_array), dat)
 
-    return new_array
-end
+#     return new_array
+# end
 
 """
     cross_correlation(

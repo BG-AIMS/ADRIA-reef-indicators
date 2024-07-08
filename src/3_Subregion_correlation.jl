@@ -28,13 +28,13 @@ fig_opts = Dict(:size => (1600, 800))
 tac = ADRIA.metrics.total_absolute_cover(rs)
 
 # reduce all the scenarios down to one series for each reef
-tac_sites = mapslices_toFloat64(median, tac, :scenarios)
+tac_sites = Float64.(mapslices(median, tac, :scenarios))
 
 # Have to remove the first year as there seems to be an issue with that year's data
 tac_sites_reduced = tac_sites[timesteps=2:79]
 
 # calculate the relative site cover from the initial cover across timesteps for each reef
-rel_cover = mapslices_toFloat64(relative_site_cover, tac_sites_reduced, :timesteps)
+rel_cover = Float64.(mapslices(relative_site_cover, tac_sites_reduced, :timesteps))
 
 port_subregions = unique(context_layers.closest_port)
 
