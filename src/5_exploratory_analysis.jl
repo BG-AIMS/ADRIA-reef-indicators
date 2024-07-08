@@ -10,6 +10,8 @@ using CSV, YAXArrays
 
 using GLMakie, GeoMakie, GraphMakie
 
+using GLM
+
 using Infiltrator
 
 using ADRIA, CoralBlox
@@ -28,6 +30,24 @@ connectivity_matrix = gbr_dom.conn
 # Load initial coral cover data
 initial_cc = gbr_dom.init_coral_cover
 total_icc = mapslices_toFloat64(sum, initial_cc, :species)
+
+# species =
+# [
+# "tabular Acropora_2_1", "tabular Acropora_2_2",
+# "tabular Acropora_2_3", "tabular Acropora_2_4", "tabular Acropora_2_5", "tabular Acropora_2_6", "tabular Acropora_2_7",
+# "corymbose Acropora_3_1", "corymbose Acropora_3_2", "corymbose Acropora_3_3", "corymbose Acropora_3_4",
+# "corymbose Acropora_3_5", "corymbose Acropora_3_6", "corymbose Acropora_3_7", "corymbose non-Acropora_4_1", "corymbose non-Acropora_4_2",
+# "corymbose non-Acropora_4_3", "corymbose non-Acropora_4_4", "corymbose non-Acropora_4_5", "corymbose non-Acropora_4_6", "corymbose non-Acropora_4_7",
+# "Small massives_5_1", "Small massives_5_2", "Small massives_5_3", "Small massives_5_4", "Small massives_5_5",
+# "Small massives_5_6", "Small massives_5_7", "Large massives_6_1", "Large massives_6_2", "Large massives_6_3",
+# "Large massives_6_4", "Large massives_6_5", "Large massives_6_6", "Large massives_6_7"
+# ]
+# spec_groups = getindex.(species, [1:15])
+
+# icc = DataFrame(Matrix(initial_cc.data), collect(getAxis("locs", initial_cc).val))
+# icc.spec_groups = spec_groups
+# gdf = DataFrames.groupby(icc, :spec_groups)
+# mapcols(gdf, sum)
 
 # Calculate the incoming/outgoing connection count/strength/overall source/sink rating of reefs
 reefs = collect(getAxis("Source", connectivity_matrix).val)
@@ -53,7 +73,7 @@ end
 
 # Attach connectivity, cover and size metrics to context_layers
 source_to_sink_context = leftjoin(context_layers, source_to_sink; on=:GBRMPA_ID, order=:left)
-source_to_sink_context.initial_cc = total_icc.data
+source_to_sink_context.initial_coral_cover = total_icc.data
 source_to_sink_context = dropmissing(source_to_sink_context, :total_comb)
 
 source_to_sink_context = leftjoin(source_to_sink_context, gbr_dom.site_data[:,[:UNIQUE_ID, :area]]; on=:UNIQUE_ID, order=:left)
@@ -89,9 +109,9 @@ hist(source_to_sink.income_count)
 hist(target_reefs_context.income_count)
 
 
-hist(source_to_sink_context.initial_cc)
-show(target_reefs_context.initial_cc)
-hist(target_reefs_context.initial_cc)
+hist(source_to_sink_context.initial_coral_cover)
+show(target_reefs_context.initial_coral_cover)
+hist(target_reefs_context.initial_coral_cover)
 
 #
 # Comparing the subregion/bioregion scale connectivity metrics to those found in target_reefs
@@ -118,3 +138,13 @@ hist(target_reefs_context[(target_reefs_context.bioregion .== "Outer Shelf Reefs
 
 hist(source_to_sink_context.area, bins=30)
 hist(target_reefs_context.area)
+
+source_to_sink_context.target_cat = source_to_sink_context.UNIQUE_ID .∈ [target_reefs]
+source_to_sink_context.total_comb .= convert.(Float64, source_to_sink_context.total_comb)
+source_to_sink_context.income_strength .= convert.(Float64, source_to_sink_context.income_strength)
+filtered_bior_context = source_to_sink_context[source_to_sink_context.bioregion .∈ [unique(target_reefs_context.bioregion)], :]
+filtered_subr_context = source_to_sink_context[source_to_sink_context.closest_port .∈ [unique(target_reefs_context.closest_port)], :]
+
+glm(@formula(target_cat ~ total_comb + initial_coral_cover + area), source_to_sink_context, Binomial(), LogitLink())
+glm(@formula(target_cat ~ total_comb + initial_coral_cover + area), filtered_bior_context, Binomial())
+glm(@formula(target_cat ~ total_comb + initial_coral_cover + area), filtered_subr_context, Binomial())
