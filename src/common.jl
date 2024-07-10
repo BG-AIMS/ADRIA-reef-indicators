@@ -188,7 +188,10 @@ function plot_lines(
     # Define the unique colors and names for each level of factor color_by.
     # Use a different color palette for factors with high numbers of levels
     # (this palette is not as good for visualisation).
-    if size(unique(df[:, color_by]),1) <= 20
+    if size(unique(df[:, color_by]),1) == 2
+        alph_palette = colorscheme_alpha(ColorSchemes.tableau_20, alpha)[2:3]
+        palette = ColorSchemes.tableau_20.colors[2:3]
+    elseif size(unique(df[:, color_by]),1) <= 20
         alph_palette = colorscheme_alpha(ColorSchemes.tableau_20, alpha)
         palette = ColorSchemes.tableau_20.colors
     else
@@ -555,7 +558,7 @@ function lagged_cluster_analysis(
     for cluster in 1:n_clusters
         target_cluster = region_rel_cover[:, (region_clusters .== cluster)]
 
-        cluster_median = mapslices_toFloat64(median, target_cluster, :sites)
+        cluster_median = Float64.(mapslices(median, target_cluster, dims=[:sites]))
 
         for (ind, reef) in enumerate(eachcol(target_cluster))
             reef_name = target_cluster.sites[ind]
@@ -598,7 +601,7 @@ function lagged_region_analysis(
         [:UNIQUE_ID; :region; lags_symbols]
     )
 
-    reg_median = mapslices_toFloat64(median, region_rel_cover, :sites)
+    reg_median = Float64.(mapslices(median, region_rel_cover, dims=[:sites]))
 
     for (ind, reef) in enumerate(eachcol(region_rel_cover))
         reef_name = region_rel_cover.sites[ind]
