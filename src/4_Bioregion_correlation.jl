@@ -4,15 +4,15 @@ across the reefs in the GBR. This analysis is slightly finer spatial scale than 
 If 3_Subregion.jl has been run immediately before then the result reefs can be compared.
 """
 
-using CSV
-
 using GLMakie, GeoMakie, GraphMakie
 
 using YAXArrays, DimensionalData
 
-using DataFrames, Statistics
+using DataFrames, Statistics, YAXArrays
 
 using ADRIA, CoralBlox
+
+import GeoDataFrames as GDF
 
 include("common.jl")
 
