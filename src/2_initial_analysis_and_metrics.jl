@@ -12,6 +12,8 @@ using DataFrames, Statistics
 
 using ADRIA, CoralBlox
 
+import GeoDataFrames as GDF
+
 include("common.jl")
 
 rs = ADRIA.load_results("outputs/ADRIA-out/ReefMod Engine__RCPs_45__2024-06-19_10_58_55_647")
@@ -50,4 +52,5 @@ save("figs/all_reefs_initial_man_areas.png", f)
 
 f, ax = plot_lines(data, :management_area, 2, 17, "Year", "Proportion of reef cover Year2", 0.1)
 hlines!(1, color=:green)
+hlines!(0.1, color=:blue)
 save("figs/initial_man_areas_15_years.png", f)
