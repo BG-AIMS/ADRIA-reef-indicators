@@ -1,6 +1,7 @@
 """
 Load initial result set from GBR-wide ReefMod domain.
 """
+
 using GLMakie, GeoMakie, GraphMakie
 
 using Infiltrator
