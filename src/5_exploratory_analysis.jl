@@ -14,6 +14,12 @@ using ADRIA
 
 import GeoDataFrames as GDF
 
+# If previous scripts have never been run or updated:
+# include("1_initial_results.jl")
+# include("3_Subregion_correlation.jl")
+# include("4_Bioregion_correlation.jl")
+# include("5_analysis_context_layers.jl")
+
 # Load updated context layer data
 context_layers = GDF.read("../data/analysis_context_layers.gpkg",)
 
@@ -79,13 +85,6 @@ hist(target_reefs_context[(target_reefs_context.bioregion .== "Outer Shelf Reefs
 
 hist(context_layers.area, bins=30)
 hist(target_reefs_context.area)
-
-context_layers.target_cat = context_layers.UNIQUE_ID .∈ [target_reefs]
-context_layers.total_comb .= convert.(Float64, context_layers.total_comb)
-context_layers.income_strength .= convert.(Float64, context_layers.income_strength)
-context_layers.so_to_si .= convert.(Float64, context_layers.so_to_si)
-context_layers.dhw_cor .= convert.(Float64, context_layers.dhw_cor)
-
 
 
 no_crash_gbr = context_layers[context_layers.UNIQUE_ID .∉ [crash_reefs],:]
