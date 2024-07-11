@@ -541,7 +541,7 @@ region. Uses `mapslices_toFloat64()` and `cross_correlation()` functions.
 - `lags` : Vector of lags to apply with `cross_correlation()`. Positive lags test for `x` leading `y`, negative lags test for `y` leading `x`.
 
 # Returns
-DataFrame of correlation values for each reef in each cluster with columns for the reef UNIQUE_ID, cluster category and correlation values for each lag step.
+DataFrame of correlation values for each reef in each cluster with columns for the reef RME_UNIQUE_ID, cluster category and correlation values for each lag step.
 """
 function lagged_cluster_analysis(
         region_rel_cover::YAXArray,
@@ -552,7 +552,7 @@ function lagged_cluster_analysis(
     lags_symbols = [Symbol("lag" * string(lags[a])) for a in eachindex(lags)]
     cross_cor = DataFrame(
         [Vector{Any}() for _ in 1:(length(lags)+2)],
-        [:UNIQUE_ID; :t_cluster ; lags_symbols]
+        [:RME_UNIQUE_ID; :t_cluster ; lags_symbols]
     )
 
     for cluster in 1:n_clusters
@@ -587,7 +587,7 @@ Uses `mapslices_toFloat64()` and `cross_correlation()` functions.
 - `lags` : Vector of lags to apply with `cross_correlation()`. Positive lags test for `x` leading `y`, negative lags test for `y` leading `x`.
 
 # Returns
-DataFrame of correlation values for each reef in target_region with columns for the reef UNIQUE_ID, region and correlation values for each lag step.
+DataFrame of correlation values for each reef in target_region with columns for the reef RME_UNIQUE_ID, region and correlation values for each lag step.
 """
 function lagged_region_analysis(
         region_rel_cover::YAXArray,
@@ -598,7 +598,7 @@ function lagged_region_analysis(
     lags_symbols = [Symbol("lag" * string(lags[a])) for a in eachindex(lags)]
     cross_cor = DataFrame(
         [Vector{Any}() for _ in 1:(length(lags)+2)],
-        [:UNIQUE_ID; :region; lags_symbols]
+        [:RME_UNIQUE_ID; :region; lags_symbols]
     )
 
     reg_median = Float64.(mapslices(median, region_rel_cover, dims=[:sites]))
@@ -611,4 +611,45 @@ function lagged_region_analysis(
     end
 
     return cross_cor
+end
+
+"""
+    subregion_analysis(
+        subregions::Vector{String},
+        rel_cover::YAXArray,
+        context_layers::DataFrame,
+        category::Symbol
+    )::DataFrame
+
+Apply lagged_region_analysis across a list of subregions such as closest_ports or bioregions.
+Uses `lagged_region_analysis()` function, lags must be specified.
+
+# Arguments
+- `subregions` : Vector of subregion names to apply analysis to. Must be found in `context_layers.category` column.
+- `rel_cover` : YAXArray of cover trajectories for each reef.
+- `context_layers` : DataFrame containing columns `RME_UNIQUE_ID` and category column matching `subregions`.
+- `category` : Column name in `context_layers` that contains `subregions` for each reef.
+- `lags` : Vector of lags to apply with `cross_correlation()`. Positive lags test for `x` leading `y`, negative lags test for `y` leading `x`.
+
+# Returns
+DataFrame of correlation values for each reef and surrounding reefs in 'subregion'. Contains RME_UNIQUE_ID, region and correlation values for each lag step.
+"""
+function subregion_analysis(
+    subregions::Vector{String},
+    rel_cover::YAXArray,
+    context_layers::DataFrame,
+    category::Symbol,
+    lags::AbstractVector{<:Integer}
+    )::DataFrame
+
+    lagged_analysis_sub = DataFrame()
+    for subregion in subregions
+        subregion_reefs = context_layers[(context_layers[:, category] .== subregion), :RME_UNIQUE_ID]
+        subregion_cover = rel_cover[:, rel_cover.sites .∈ [subregion_reefs]]
+
+        subregion_lagged_analysis = lagged_region_analysis(subregion_cover, subregion, lags)
+        lagged_analysis_sub = vcat(lagged_analysis_sub, subregion_lagged_analysis)
+    end
+
+    return lagged_analysis_sub
 end
