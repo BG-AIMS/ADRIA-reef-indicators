@@ -1,7 +1,7 @@
 """
 Access the domain connectivity and calculate the strength and number of outgoing/incoming
-connections for each reef. Run immediately after 4_.jl to use the updated context_layers with
-bioregions.
+connections for each reef. Run after running 3_.jl to include the bioregions and identified
+reef layers.
 """
 
 using DataFrames, Statistics, YAXArrays
@@ -16,6 +16,10 @@ import GeoFormatTypes as GFT
 
 include("common.jl")
 
+# Load context layers with bioregions and target reefs
+context_layers = GDF.read("data/context_layers_targetted.gpkg")
+context_layers.RME_GBRMPA_ID = ifelse.((context_layers.RME_GBRMPA_ID .== "20198"), "20-198", context_layers.RME_GBRMPA_ID)
+
 # GBR wide domain
 gbr_domain_path = "c:/Users/bgrier/Documents/Projects/ADRIA_Domains/rme_ml_2024_01_08/"
 gbr_dom = ADRIA.load_domain(RMEDomain, gbr_domain_path, "45")
@@ -25,18 +29,36 @@ connectivity_matrix = gbr_dom.conn
 
 # Calculate connectivity metrics for context analysis
 reefs = collect(getAxis("Source", connectivity_matrix).val)
+
+col_types = [
+    String,
+    Float64,
+    Int64,
+    Float64,
+    Float64,
+    Int64,
+    Float64,
+    Float64,
+    Int64,
+    Float64,
+    Float64
+]
+
 source_to_sink = DataFrame(
-    RME_GBRMPA_ID = [],
-    income_strength = [],
-    income_count = [],
-    income_comb = [],
-    out_strength = [],
-    out_count = [],
-    out_comb = [],
-    total_strength = [],
-    total_count = [],
-    total_comb = [],
-    so_to_si = []
+    [T[] for T in col_types],
+    [
+    :RME_GBRMPA_ID,
+    :income_strength,
+    :income_count,
+    :income_comb,
+    :out_strength,
+    :out_count,
+    :out_comb,
+    :total_strength,
+    :total_count,
+    :total_comb,
+    :so_to_si
+    ]
 )
 
 for reef in eachindex(reefs)
@@ -58,8 +80,9 @@ for reef in eachindex(reefs)
 
     so_to_si = out_comb / income_comb
 
-    push!(source_to_sink,
-    [
+    push!(
+        source_to_sink,
+        [
         reef_id,
         income_strength,
         income_count,
@@ -71,7 +94,7 @@ for reef in eachindex(reefs)
         total_count,
         total_comb,
         so_to_si
-    ]
+        ]
     )
 end
 context_layers = leftjoin(context_layers, source_to_sink; on=:RME_GBRMPA_ID, order=:left)
@@ -110,6 +133,12 @@ dhw_locs = DataFrame(mean_dhw = dhw_locs.data, RME_GBRMPA_ID = collect(getAxis("
 context_layers = leftjoin(context_layers, dhw_locs, on=:RME_GBRMPA_ID, order=:left)
 
 # DHW correlation for sites
+rs = ADRIA.load_results("outputs/ADRIA-out/ReefMod Engine__RCPs_45__2024-06-19_10_58_55_647")
+tac = ADRIA.metrics.total_absolute_cover(rs)
+tac_sites = Float64.(mapslices(median, tac, dims=[:scenarios]))
+tac_sites_reduced = tac_sites[timesteps=2:79]
+rel_cover = Float64.(mapslices(relative_site_cover, tac_sites_reduced, dims=[:timesteps]))
+
 #rel_dhw = Float64.(mapslices(relative_site_cover, dhw_time, dims=[:timesteps]))
 dhw_cor = DataFrame(UNIQUE_ID = [], dhw_cor = [])
 for (ind, reef) in enumerate(eachcol(rel_cover))
@@ -123,10 +152,11 @@ for (ind, reef) in enumerate(eachcol(rel_cover))
     push!(dhw_cor, [id; correlation])
 
 end
-context_layers = leftjoin(context_layers, dhw_cor, on=:RME_UNIQUE_ID, order=:left)
+context_layers = leftjoin(context_layers, dhw_cor, on=:UNIQUE_ID, order=:left)
 
 # 4. Attach site data/area to context_layers
-context_layers = leftjoin(context_layers, gbr_dom.site_data[:,[:RME_UNIQUE_ID, :area]]; on=:RME_UNIQUE_ID, order=:left)
+gbr_site_data = gbr_dom.site_data[:,[:UNIQUE_ID, :area]]
+context_layers = leftjoin(context_layers, gbr_site_data; on=:UNIQUE_ID, order=:left)
 
 # 5. Calculate the number of reefs in each bioregion
 context_layers.bioregion_count .= 1
@@ -134,4 +164,19 @@ for reef in eachrow(context_layers)
     reef.bioregion_count = count(context_layers.bioregion .== [reef.bioregion])
 end
 
-GDF.write("../data/analysis_context_layers.gpkg", context_layers; crs=GFT.EPSG(7844))
+# Format columns for writing to geopackage
+context_layers.income_strength = Float64.(context_layers.income_strength)
+context_layers.income_count .= convert.(Int64, context_layers.income_count)
+context_layers.income_comb .= convert.(Float64, context_layers.income_comb)
+context_layers.out_strength .= convert.(Float64, context_layers.out_strength)
+context_layers.out_count .= convert.(Int64, context_layers.out_count)
+context_layers.out_comb .= convert.(Float64, context_layers.out_comb)
+context_layers.total_strength .= convert.(Float64, context_layers.total_strength)
+context_layers.total_count .= convert.(Int64, context_layers.total_count)
+context_layers.total_comb .= convert.(Float64, context_layers.total_comb)
+context_layers.so_to_si .= convert.(Float64, context_layers.so_to_si)
+context_layers.mean_dhw .= convert.(Float64, context_layers.mean_dhw)
+context_layers.dhw_cor = ifelse.(isnan.(context_layers.dhw_cor), 0.0, context_layers.dhw_cor)
+context_layers.area .= convert.(Float64, context_layers.area)
+
+GDF.write("data/analysis_context_layers.gpkg", context_layers; crs=GFT.EPSG(7844))
