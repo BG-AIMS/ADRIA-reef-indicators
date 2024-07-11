@@ -18,6 +18,7 @@ include("common.jl")
 context_layers = find_latest_file("../canonical-reefs/output/")
 context_layers = GDF.read(context_layers)
 
+# Add Bioregions to context layers
 bioregions = GDF.read("data/GBRMPA_reefal_bioregions.gpkg")
 context_bioregion = find_intersections(context_layers, bioregions, :GBRMPA_ID, :DESCRIP, :SHAPE)
 context_layers = leftjoin(context_layers, context_bioregion; on=:GBRMPA_ID, matchmissing=:notequal, order=:left)
