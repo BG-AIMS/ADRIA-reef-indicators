@@ -2,13 +2,12 @@
 Load the initially created result set and calculate the metrics needed for later analyses.
 (Currently these metrics are recalculated in later scripts.)
 """
-using CSV
 
 using GLMakie, GeoMakie, GraphMakie
 
 using YAXArrays, DimensionalData
 
-using DataFrames, Statistics
+using DataFrames, Statistics, CSV
 
 using ADRIA, CoralBlox
 

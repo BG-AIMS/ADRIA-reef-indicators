@@ -1,9 +1,6 @@
 """
 Load initial result set from GBR-wide ReefMod domain.
 """
-using DataFrames, Statistics
-
-using CSV
 
 using GLMakie, GeoMakie, GraphMakie
 
