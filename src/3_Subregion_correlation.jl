@@ -1,15 +1,13 @@
 """
-Perform Subregion lagged correlation analysis. This is performed by assigning each reef to
-its closest coastal port. There are ~15 unique port areas the reefs can be grouped into.
+Perfom lagged correlation analysis across reefs within closest_port and bioregion subregions.
+There are 15 closes_port subregions and there are ~30 bioregions across the reefs in the GBR.
 """
-
-using CSV
 
 using GLMakie, GeoMakie, GraphMakie
 
 using YAXArrays, DimensionalData
 
-using DataFrames, Statistics
+using DataFrames, Statistics, YAXArrays
 
 using ADRIA, CoralBlox
 
@@ -20,13 +18,16 @@ include("common.jl")
 context_layers = find_latest_file("../canonical-reefs/output/")
 context_layers = GDF.read(context_layers)
 
+bioregions = GDF.read("data/GBRMPA_reefal_bioregions.gpkg")
+context_bioregion = find_intersections(context_layers, bioregions, :GBRMPA_ID, :DESCRIP, :SHAPE)
+context_layers = leftjoin(context_layers, context_bioregion; on=:GBRMPA_ID, matchmissing=:notequal, order=:left)
+rename!(context_layers, :area_ID => :bioregion)
+context_layers.bioregion .= ifelse.(ismissing.(context_layers.bioregion), "NA", context_layers.bioregion)
+context_layers.bioregion = convert.(String, context_layers.bioregion)
+
 rs = ADRIA.load_results("outputs/ADRIA-out/ReefMod Engine__RCPs_45__2024-06-19_10_58_55_647")
 
-fig_opts = Dict(:size => (1600, 800))
-
-
-
-# s_tac = ADRIA.metrics.scenario_total_cover(rs)
+# # s_tac = ADRIA.metrics.scenario_total_cover(rs)
 tac = ADRIA.metrics.total_absolute_cover(rs)
 
 # reduce all the scenarios down to one series for each reef
@@ -38,19 +39,21 @@ tac_sites_reduced = tac_sites[timesteps=2:79]
 # calculate the relative site cover from the initial cover across timesteps for each reef
 rel_cover = Float64.(mapslices(relative_site_cover, tac_sites_reduced, dims=[:timesteps]))
 
+# Apply analysis to closest_port subregions - 15 subregions
 port_subregions = unique(context_layers.closest_port)
+lagged_analysis_subregion = subregion_analysis(port_subregions, rel_cover, context_layers, :closest_port, 1:10)
+target_reefs_subr = lagged_analysis_subregion[(lagged_analysis_subregion.lag6 .>= 0.8), :RME_UNIQUE_ID]
 
-lagged_analysis_sub = DataFrame()
-for subregion in port_subregions
-    subregion_reefs = context_layers[(context_layers.closest_port .== subregion), :UNIQUE_ID]
-    subregion_cover = rel_cover[:, rel_cover.sites .∈ [subregion_reefs]]
+# Apply analysis to bioregion subregions - 31 subregions
+bioregions = unique(context_layers.bioregion)
+lagged_analysis_bior = subregion_analysis(bioregions, rel_cover, context_layers, :bioregion, 1:10)
+target_reefs_bior = lagged_analysis_bior[(lagged_analysis_bior.lag6 .>= 0.8), :RME_UNIQUE_ID]
 
-    subregion_lagged_analysis = lagged_region_analysis(subregion_cover, subregion, 1:10)
-    lagged_analysis_sub = vcat(lagged_analysis_sub, subregion_lagged_analysis)
-end
+# Find common reefs betwen two subregion analyses
+target_reefs = target_reefs_bior[(target_reefs_bior .∈ [target_reefs_subr])]
 
-reefs_subr = lagged_analysis_sub[(lagged_analysis_sub.lag6 .>= 0.8), :UNIQUE_ID]
-f, ga = plot_map(context_layers, :closest_port)
-plot_map!(ga, context_layers[(context_layers.UNIQUE_ID .∈ [reefs_subr]),:], color=:black)
-
-plot_map(context_layers[(context_layers.UNIQUE_ID .∈ [reefs_subr]), :], :closest_port)
+# Add identified reefs to context_layers and write to gpkg with bioregion names
+context_layers.target_reefs_subr = context_layers.RME_UNIQUE_ID .∈ [target_reefs_subr]
+context_layers.target_reefs_bior = context_layers.RME_UNIQUE_ID .∈ [target_reefs_bior]
+context_layers.target_reefs = context_layers.RME_UNIQUE_ID .∈ [target_reefs]
+GDF.write("data/context_layers_targetted.gpkg", context_layers; crs=crs=GFT.EPSG(7844))
