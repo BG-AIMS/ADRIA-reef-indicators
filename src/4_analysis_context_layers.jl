@@ -134,6 +134,7 @@ context_layers = leftjoin(context_layers, dhw_locs, on=:RME_GBRMPA_ID, order=:le
 
 # DHW correlation for sites
 rs = ADRIA.load_results("outputs/ADRIA-out/ReefMod Engine__RCPs_45__2024-06-19_10_58_55_647")
+#rs = ADRIA.load_results("outputs/ADRIA-out/ReefMod Engine__RCPs_85__2024-07-12_09_49_08_988")
 tac = ADRIA.metrics.total_absolute_cover(rs)
 tac_sites = Float64.(mapslices(median, tac, dims=[:scenarios]))
 tac_sites_reduced = tac_sites[timesteps=2:79]
