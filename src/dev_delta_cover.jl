@@ -48,7 +48,7 @@ end
 
 
 
-test_delta = mapslices_toFloat64(delta_cover, rel_cover, :timesteps)
+test_delta = Float64.(mapslices(delta_cover, rel_cover, dims=[:timesteps]))
 series(test_delta.data', solid_color=:black)
 hlines!(0, color=:red)
 
