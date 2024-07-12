@@ -27,6 +27,7 @@ context_layers.bioregion .= ifelse.(ismissing.(context_layers.bioregion), "NA", 
 context_layers.bioregion = convert.(String, context_layers.bioregion)
 
 rs = ADRIA.load_results("outputs/ADRIA-out/ReefMod Engine__RCPs_45__2024-06-19_10_58_55_647")
+#rs = ADRIA.load_results("outputs/ADRIA-out/ReefMod Engine__RCPs_26__2024-07-12_09_34_27_870")
 
 # # s_tac = ADRIA.metrics.scenario_total_cover(rs)
 tac = ADRIA.metrics.total_absolute_cover(rs)
