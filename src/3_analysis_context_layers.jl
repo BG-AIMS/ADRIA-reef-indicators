@@ -134,6 +134,7 @@ context_layers = leftjoin(context_layers, dhw_locs, on=:RME_GBRMPA_ID, order=:le
 
 # DHW correlation for sites
 rs = ADRIA.load_results("outputs/ADRIA-out/ReefMod Engine__RCPs_45__2024-06-19_10_58_55_647")
+#rs = ADRIA.load_results("outputs/ADRIA-out/ReefMod Engine__RCPs_45__2024-07-26_12_05_07_844")
 #rs = ADRIA.load_results("outputs/ADRIA-out/ReefMod Engine__RCPs_85__2024-07-12_09_49_08_988")
 tac = ADRIA.metrics.total_absolute_cover(rs)
 tac_sites = Float64.(mapslices(median, tac, dims=[:scenarios]))
@@ -165,6 +166,25 @@ for reef in eachrow(context_layers)
     reef.bioregion_count = count(context_layers.bioregion .== [reef.bioregion])
 end
 
+# 6. Calculate eigenvector_centrality scores for each reef - GBR-wide connections weighted by subregions
+mean_conn, std_conn = load_connectivity(conn_path, context_layers.RME_UNIQUE_ID)
+
+mean_conn[diagind(mean_conn)] .= 0.0
+
+conn_whole_gbr = connectivity_scoring(mean_conn)
+conn_mgmt_area = connectivity_scoring(mean_conn; gdf=context_layers, context_layer=:management_area, conn_col_name=:conn_score_mgmt, by_layer=true)
+conn_subr_area = connectivity_scoring(mean_conn; gdf=context_layers, context_layer=:closest_port, conn_col_name=:conn_score_subr, by_layer=true)
+conn_bior_area = connectivity_scoring(mean_conn; gdf=context_layers, context_layer=:bioregion, conn_col_name=:conn_score_bior, by_layer=true)
+
+context_layers = leftjoin(context_layers, conn_whole_gbr, on=:RME_UNIQUE_ID, order=:left)
+context_layers = leftjoin(context_layers, conn_mgmt_area, on=:RME_UNIQUE_ID, order=:left)
+context_layers = leftjoin(context_layers, conn_subr_area, on=:RME_UNIQUE_ID, order=:left)
+context_layers = leftjoin(context_layers, conn_bior_area, on=:RME_UNIQUE_ID, order=:left)
+
+context_layers = weight_by_context(context_layers, :conn_score_mgmt, :management_area, :conn_ranked_mgmt)
+context_layers = weight_by_context(context_layers, :conn_score_subr, :closest_port, :conn_ranked_subr)
+context_layers = weight_by_context(context_layers, :conn_score_bior, :bioregion, :conn_ranked_bior)
+
 # Format columns for writing to geopackage
 context_layers.income_strength = Float64.(context_layers.income_strength)
 context_layers.income_count .= convert.(Int64, context_layers.income_count)
@@ -179,5 +199,9 @@ context_layers.so_to_si .= convert.(Float64, context_layers.so_to_si)
 context_layers.mean_dhw .= convert.(Float64, context_layers.mean_dhw)
 context_layers.dhw_cor = ifelse.(isnan.(context_layers.dhw_cor), 0.0, context_layers.dhw_cor)
 context_layers.area .= convert.(Float64, context_layers.area)
+context_layers.conn_score .= convert.(Float64, context_layers.conn_score)
+context_layers.conn_score_mgmt .= convert.(Float64, context_layers.conn_score_mgmt)
+context_layers.conn_score_subr .= convert.(Float64, context_layers.conn_score_subr)
+context_layers.conn_score_bior .= convert.(Float64, context_layers.conn_score_bior)
 
 GDF.write("data/analysis_context_layers.gpkg", context_layers; crs=GFT.EPSG(7844))
