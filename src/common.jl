@@ -5,22 +5,29 @@ using
     Dates,
     DataFrames,
     YAXArrays,
-    DimensionalData
+    DimensionalData,
+    DataStructures
 
 using
     ColorSchemes,
     GeoMakie,
-    GLMakie
+    GLMakie,
+    GraphMakie
 
 using
     Statistics,
     Bootstrap,
     LinearAlgebra
 
+using Graphs, SimpleWeightedGraphs
+import Graphs.Parallel
 import GeoDataFrames as GDF
 import GeoFormatTypes as GFT
 import ArchGDAL as AG
 import GeoInterface as GI
+
+gbr_domain_path = "c:/Users/bgrier/Documents/Projects/ADRIA_Domains/rme_ml_2024_01_08/"
+conn_path = joinpath(gbr_domain_path, "data_files/con_bin")
 
 function _convert_plottable(gdf::Union{DataFrame,DataFrameRow}, geom_col::Symbol)
     local plottable
@@ -652,4 +659,177 @@ function subregion_analysis(
     end
 
     return lagged_analysis_sub
+end
+
+"""
+    DataCube(data::AbstractArray; kwargs...)::YAXArray
+
+Constructor for YAXArray. When used with `axes_names`, the axes labels will be UnitRanges
+from 1 up to that axis length.
+
+# Arguments
+- `data` : Array of data to be used when building the YAXArray
+- `axes_names` :
+"""
+function DataCube(data::AbstractArray; kwargs...)::YAXArray
+    return YAXArray(Tuple(Dim{name}(val) for (name, val) in kwargs), data)
+end
+function DataCube(data::AbstractArray, axes_names::Tuple)::YAXArray
+    return DataCube(data; NamedTuple{axes_names}(1:len for len in size(data))...)
+end
+
+function load_connectivity(
+    conn_path::String, loc_ids::Vector{String}
+)::Tuple{YAXArray, YAXArray}
+    conn_files = glob("*CONNECT_ACRO*", conn_path)
+    if isempty(conn_files)
+        ArgumentError("No CONNECT_ACRO data files found in: $(conn_path)")
+    end
+
+    n_locs = length(loc_ids)
+    tmp_mat = zeros(n_locs, n_locs, length(conn_files))
+    for (i, fn) in enumerate(conn_files)
+        # File pattern used is "CONNECT_ACRO_[YEAR]_[DAY].bin"
+        # We use a clunky regex approach to identify the year.
+        # tmp = replace(split(fn, r"(?=CONNECT_ACRO_[0-9,4]+)")[2], "CONNECT_ACRO_"=>"")
+        # year_id = split(tmp, "_")[1]
+
+        # Turns out, there's only data for each year so just read in directly
+        # Have to read in binary data - read first two values as Int32, and the rest
+        # as Float32. Then reshape into a square (n_locs * n_locs) matrix.
+        data = IOBuffer(read(fn))
+        x = read(data, Int32)
+        y = read(data, Int32)
+
+        ds = Vector{Float32}(undef, x * y)
+        tmp_mat[:, :, i] .= reshape(read!(data, ds), (n_locs, n_locs))
+    end
+
+    # Mean/stdev over all years
+    mean_conn_data::Matrix{Float64} = dropdims(mean(tmp_mat; dims=3); dims=3)
+    stdev_conn_data::Matrix{Float64} = dropdims(std(tmp_mat; dims=3); dims=3)
+
+    mean_conn = DataCube(
+        mean_conn_data;
+        Source=loc_ids,
+        Sink=loc_ids,
+    )
+
+    stdev_conn = DataCube(
+        stdev_conn_data;
+        Source=loc_ids,
+        Sink=loc_ids,
+    )
+
+    return mean_conn, stdev_conn
+end
+
+canonical_reefs = find_latest_file("../canonical-reefs/output/")
+canonical_reefs = GDF.read(canonical_reefs)
+
+#MANAGEMENT_AREAS = unique(canonical_reefs.management_area)
+
+# Get location indices
+REGION_REEFS = DataStructures.OrderedDict(
+    "Far Northern Management Area"=>Int64[],
+    "Cairns/Cooktown Management Area"=>Int64[],
+    "Townsville/Whitsunday Management Area"=>Int64[],
+    "Mackay/Capricorn Management Area"=>Int64[],
+)
+
+for mgmt_area in collect(keys(REGION_REEFS))
+    if mgmt_area == "NA"
+        continue
+    end
+
+    REGION_REEFS[mgmt_area] = findall(canonical_reefs.management_area .== mgmt_area)
+end
+
+"""
+    connectivity_scoring(
+        conn_matrix::YAXArray;
+        gdf::DataFrame=nothing,
+        context_layer::Symbol=nothing,
+        conn_col_name::Symbol=nothing,
+        by_layer::Bool=false
+    )::DataFrame
+
+Calculate eigenvector_centrality connectivity scores for GBR reefs at different spatial scales.
+When by_layer=true and a DataFrame is given for gdf and a layer symbol is given for context_layer,
+then reefs are subset into categories via context_layer groups and then eigenvectors are calculated.
+
+# Arguments
+- `conn_matrix` : YAXArray containing the connectivity values. Diagonal should be set to 0 prior to use.
+- `gdf` : DataFrame containing context_layer.
+- `context_layer` : Categorical column with levels for grouping.
+- `by_layer` : Calculate by grouping reefs by context_layer (vs whole GBR connectivity).
+"""
+function connectivity_scoring(
+    conn_matrix::YAXArray;
+    gdf=nothing,
+    context_layer=nothing,
+    conn_col_name=nothing,
+    by_layer::Bool=false
+)::DataFrame
+    RME_UNIQUE_ID = collect(getAxis("Source", conn_matrix).val)
+    connectivity_scores = DataFrame(
+        [RME_UNIQUE_ID, Vector{Union{Missing, Float64}}(missing, 3806)],
+        [:RME_UNIQUE_ID, :conn_score]
+    )
+
+    if by_layer
+        for level in unique(gdf[:, context_layer])
+            level_reefs = gdf[gdf[:, context_layer] .== level, :RME_UNIQUE_ID]
+            level_matrix = conn_matrix[conn_matrix.Source .∈ [level_reefs], conn_matrix.Sink .∈ [level_reefs]]
+
+            g = SimpleWeightedDiGraph(level_matrix)
+            conn_scores = Dict(zip(collect(level_matrix.Source), eigenvector_centrality(g)))
+
+            for (k, v) in conn_scores
+                connectivity_scores[connectivity_scores.RME_UNIQUE_ID .== k, :conn_score] .= v
+            end
+        end
+
+        rename!(connectivity_scores, :conn_score => conn_col_name)
+    else
+        g = SimpleWeightedDiGraph(conn_matrix)
+        conn_score = eigenvector_centrality(g)
+        connectivity_scores.conn_score = conn_score
+    end
+
+    return connectivity_scores
+end
+
+"""
+    weight_by_context(
+        gdf::DataFrame,
+        target_col::Symbol,
+        context_layer::Symbol,
+        new_col_name::Symbol
+    )::DataFrame
+
+Rank the values in the target_col by their numerical order within each level of context_layer category.
+
+# Arguments
+- `gdf` : DataFrame containing all columns.
+- `target_col` : Column containing values for ranking.
+- `context_layer` : Categorical column with levels for ranking.
+- `new_col_name` : Column name for new ranked values.
+"""
+function weight_by_context(
+    gdf::DataFrame,
+    target_col::Symbol,
+    context_layer::Symbol,
+    new_col_name::Symbol
+    )::DataFrame
+
+    gdf[:, new_col_name] .= 0.0
+    for level in unique(gdf[:, context_layer])
+        gdf_level = gdf[gdf[:, context_layer] .== level, :]
+
+        max_target = maximum(gdf_level[:, target_col])
+        gdf[gdf[:, context_layer] .== level, new_col_name] = gdf_level[:, target_col] ./ max_target
+    end
+
+    return gdf
 end
