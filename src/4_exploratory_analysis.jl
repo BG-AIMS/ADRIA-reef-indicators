@@ -22,8 +22,8 @@ include("3_analysis_context_layers.jl")
 # Load updated context layer data
 context_layers = GDF.read("data/analysis_context_layers.gpkg",)
 
-target_reefs_context = context_layers[context_layers.target_reefs , :]
-
+new_target_reefs_context = context_layers[context_layers.target_reefs , :]
+old_target_reefs_context = context_layers[context_layers.target_reefs , :]
 # Comparing the distribution of gbr wide connectivity metrics to those found in target_reefs
 
 # hist(context_layers.total_comb; bins=[0,0.5,1,1.5,2,2.5,3,3.5,4,5,7.5,10,12.5,15,20,25,30,35,40,50,60,70,80,90,150])
@@ -85,7 +85,7 @@ glm_subregions = glm(@formula(target_reefs_subr ~ total_comb + so_to_si + initia
 
 aic(glm_allreefs), aic(glm_bioregions), aic(glm_subregions)
 
-glmm_form = @formula(target_reefs_bior ~ out_comb + conn_score_mgmt + dhw_cor + mean_dhw + (1|bioregion))
+glmm_form = @formula(target_reefs ~ out_comb + income_comb + total_comb + dhw_cor + mean_dhw + (1|bioregion))
 glmm_fit = fit(MixedModel, glmm_form, no_crash_gbr, Binomial(), ProbitLink())
 aic(glmm_fit) # seems to be an improvement when (1|bioregion) is used
 
@@ -96,14 +96,14 @@ select!(df, :year, Not(:year))
 
 data = permutedims(df, 1, "UNIQUE_ID")
 data = data[data.UNIQUE_ID .∈ [filtered_bior.UNIQUE_ID],:]
-data = leftjoin(data, filtered_bior[:, [:UNIQUE_ID, :target_reefs, :bioregion]], on=:UNIQUE_ID)
+data = leftjoin(data, filtered_bior[:, [:UNIQUE_ID, :target_reefs, :bioregion, :management_area]], on=:UNIQUE_ID)
 data.target_reefs = ifelse.(data.target_reefs, "target", "non-target")
 target_reefs = Matrix(DataFrames.select(data[data.target_reefs .== "target", :], DataFrames.Between(Symbol(2), Symbol(15))))'
 target_reefs = mean(target_reefs, dims=2)
 non_target_reefs = Matrix(DataFrames.select(data[data.target_reefs .== "non-target", :], DataFrames.Between(Symbol(2), Symbol(15))))'
 non_target_reefs = mean(non_target_reefs, dims=2)
 
-f, ax = plot_lines(data, :target_reefs, 2, 15, "Year", "Proportion of reef cover Year2", 0.2)
+f, ax = plot_lines(data, :management_area, 2, 15, "Year", "Proportion of reef cover Year2", 0.2)
 series!(target_reefs', solid_color=:red)
 series!(non_target_reefs', solid_color=:blue)
 f, ax = plot_lines(data[data.UNIQUE_ID .∈ [target_reefs_context.UNIQUE_ID],:], :bioregion, 2, 15, "Year", "Proportion of reef cover Year2", 0.2)

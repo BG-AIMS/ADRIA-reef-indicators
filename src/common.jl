@@ -1,4 +1,5 @@
 using Glob
+using Dates
 
 using
     CSV,
@@ -26,206 +27,10 @@ import GeoFormatTypes as GFT
 import ArchGDAL as AG
 import GeoInterface as GI
 
+include("plotting_functions.jl")
+
 gbr_domain_path = "c:/Users/bgrier/Documents/Projects/ADRIA_Domains/rme_ml_2024_01_08/"
 conn_path = joinpath(gbr_domain_path, "data_files/con_bin")
-
-function _convert_plottable(gdf::Union{DataFrame,DataFrameRow}, geom_col::Symbol)
-    local plottable
-    try
-        if gdf isa DataFrame
-            plottable = GeoMakie.geo2basic(AG.forceto.(gdf[!, geom_col], AG.wkbPolygon))
-        else
-            plottable = GeoMakie.geo2basic(AG.forceto(gdf[geom_col], AG.wkbPolygon))
-        end
-    catch
-        # Column is already in a plottable form, or some unrelated error occurred
-        if gdf isa DataFrame
-            plottable = gdf[:, geom_col]
-        else
-            plottable = [gdf[geom_col]]
-        end
-    end
-
-    return plottable
-end
-
-"""
-    plot_map(gdf::DataFrame; geom_col::Symbol=:geometry, color_by::Symbol)
-
-Convenience plot function.
-
-# Arguments
-- `gdf` : GeoDataFrame
-- `color_by` : Column name holding factor to color reefs by (e.g. :management_area)
-- `geom_col` : Column name holding geometries to plot
-"""
-function plot_map(gdf::Union{DataFrame,DataFrameRow}; geom_col::Symbol=:geometry)
-    f = Figure(; size=(600, 900))
-    ga = GeoAxis(
-        f[1, 1];
-        dest="+proj=latlong +datum=WGS84",
-        xlabel="Longitude",
-        ylabel="Latitude",
-        xticklabelpad=15,
-        yticklabelpad=40,
-        xticklabelsize=10,
-        yticklabelsize=10,
-        aspect=AxisAspect(0.75),
-        xgridwidth=0.5,
-        ygridwidth=0.5,
-    )
-
-    plottable = _convert_plottable(gdf, geom_col)
-    poly!(ga, plottable)
-
-    display(f)
-
-    return f, ga
-end
-
-function plot_map!(ga::GeoAxis, gdf::DataFrame; geom_col=:geometry, color=nothing)::Nothing
-
-    plottable = _convert_plottable(gdf, geom_col)
-    if !isnothing(color)
-        poly!(ga, plottable, color=color)
-    else
-        poly!(ga, plottable)
-    end
-
-    # Set figure limits explicitly
-    xlims!(ga)
-    ylims!(ga)
-
-    return nothing
-end
-
-function plot_map!(gdf::DataFrame; geom_col=:geometry, color=nothing)::Nothing
-    return plot_map!(current_axis(), gdf; geom_col=geom_col, color=color)
-end
-
-function plot_map(gdf::Union{DataFrame,DataFrameRow}, color_by::Symbol; geom_col::Symbol=:geometry)
-    f = Figure(; size=(600, 900))
-    ga = GeoAxis(
-        f[1, 1];
-        dest="+proj=latlong +datum=WGS84",
-        xlabel="Longitude",
-        ylabel="Latitude",
-        xticklabelpad=15,
-        yticklabelpad=40,
-        xticklabelsize=10,
-        yticklabelsize=10,
-        aspect=AxisAspect(0.75),
-        xgridwidth=0.5,
-        ygridwidth=0.5,
-    )
-
-    plottable = _convert_plottable(gdf, geom_col)
-
-    # Define the unique colors and names for each level of factor color_by.
-    # Use a different color palette for factors with high numbers of levels
-    # (this palette is not as good for visualisation).
-    if size(unique(gdf[:, color_by]),1) <= 20
-        palette = ColorSchemes.tableau_20.colors
-    else
-        palette = ColorSchemes.flag_ec.colors
-    end
-
-    color_indices = groupindices(DataFrames.groupby(gdf, color_by))
-    names = unique(DataFrame(indices=color_indices, names=gdf[:, color_by]))
-
-    # Create the unique legend entries for each level of color_by
-    unique_names = names.names
-    legend_entries = []
-    for name in eachrow(names)
-        col = palette[name.indices]
-        LE = PolyElement(; color=col)
-        push!(legend_entries, [LE])
-    end
-
-    polys = poly!(ga, plottable, color=palette[color_indices])
-
-    Legend(f[2, 1], legend_entries, unique_names, nbanks=3, tellheight=true,
-    tellwidth=false, orientation=:horizontal, labelsize=10)
-
-    display(f)
-    return f, ga
-end
-
-function colorscheme_alpha(cscheme::ColorScheme, alpha = 0.5)
-    ncolors = length(cscheme)
-
-    return ColorScheme([RGBA(get(cscheme, k), alpha) for k in range(0, 1, length=ncolors)])
-end
-
-"""
-    plot_lines(
-    df::DataFrame,
-    color_by::Symbol,
-    y_start_col,
-    y_end_col,
-    x_lab::String,
-    y_lab::String,
-    alpha=1
-    )
-
-Convenience plot function for plotting timeseries lines with categorical colours.
-
-# Arguments
-- `df` : DataFrame with wide format (each unique line {reef} in a plot occupies it's own row in df)
-- `color_by` : Column name holding factor to color reefs by (e.g. :management_area)
-- `y_start_col` : Column name holding the first timepoint of the series (often 1 or 2)
-- `y_end_col` : Column name holding the last timepoint of the series (often 79)
-- `x_lab` : Label for X Axis
-- `y_lab` : Label for Y Axis
-- `alpha` : Alpha value for transparency (0-1)
-"""
-function plot_lines(
-    df::DataFrame,
-    color_by::Symbol,
-    y_start_col,
-    y_end_col,
-    x_lab::String,
-    y_lab::String,
-    alpha=1
-    )
-
-    f = Figure()
-    ax = Axis(f[1,1]; xlabel=x_lab, ylabel=y_lab)
-
-    # Define the unique colors and names for each level of factor color_by.
-    # Use a different color palette for factors with high numbers of levels
-    # (this palette is not as good for visualisation).
-    if size(unique(df[:, color_by]),1) == 2
-        alph_palette = colorscheme_alpha(ColorSchemes.tableau_20, alpha)[2:3]
-        palette = ColorSchemes.tableau_20.colors[2:3]
-    elseif size(unique(df[:, color_by]),1) <= 20
-        alph_palette = colorscheme_alpha(ColorSchemes.tableau_20, alpha)
-        palette = ColorSchemes.tableau_20.colors
-    else
-        alph_palette = colorscheme_alpha(ColorSchemes.flag_ec, alpha)
-        palette = ColorSchemes.flag_ec.colors
-    end
-
-    color_indices = groupindices(DataFrames.groupby(df, color_by))
-    color_names = unique(DataFrame(indices=color_indices, names=df[:, color_by]))
-
-    # Create the unique legend entries for each level of color_by
-    unique_names = color_names.names
-    legend_entries = []
-    for name in eachrow(color_names)
-        col = palette[name.indices]
-        LE = PolyElement(; color=col)
-        push!(legend_entries, [LE])
-    end
-
-    lines = series!(ax, Matrix(DataFrames.select(df, DataFrames.Between(Symbol(y_start_col), Symbol(y_end_col)))), color=alph_palette[color_indices])
-
-    Legend(f[2, 1], legend_entries, unique_names, nbanks=3, tellheight=true,
-    tellwidth=false, orientation=:horizontal, labelsize=10)
-
-    display(f)
-    return f, ax
-end
 
 """
     find_intersections(
@@ -362,7 +167,8 @@ Path to latest output file.
 function find_latest_file(
     target_dir::String;
     prefix::String="rrap_canonical",
-    ext::String="gpkg"
+    ext::String="gpkg",
+    DATE_FORMAT=DATE_FORMAT
 )::String
     # Get list of files matching the given pattern
     candidate_files = glob("$(prefix)*.$(ext)", target_dir)
@@ -652,7 +458,7 @@ function subregion_analysis(
     lagged_analysis_sub = DataFrame()
     for subregion in subregions
         subregion_reefs = context_layers[(context_layers[:, category] .== subregion), :RME_UNIQUE_ID]
-        subregion_cover = rel_cover[:, rel_cover.sites .∈ [subregion_reefs]]
+        subregion_cover = rel_cover[:, (findall(rel_cover.sites .∈ [subregion_reefs]))]
 
         subregion_lagged_analysis = lagged_region_analysis(subregion_cover, subregion, lags)
         lagged_analysis_sub = vcat(lagged_analysis_sub, subregion_lagged_analysis)
@@ -724,7 +530,7 @@ function load_connectivity(
     return mean_conn, stdev_conn
 end
 
-canonical_reefs = find_latest_file("../canonical-reefs/output/")
+canonical_reefs = find_latest_file("../../canonical-reefs/output/")
 canonical_reefs = GDF.read(canonical_reefs)
 
 #MANAGEMENT_AREAS = unique(canonical_reefs.management_area)
@@ -832,4 +638,65 @@ function weight_by_context(
     end
 
     return gdf
+end
+
+function prepare_ReefMod_results(
+    result_store_dir,
+    location_ids,
+    start_year,
+    end_year,
+    fn
+)
+    results = open_dataset("$(result_store_dir)/results.nc")
+    total_cover = results.total_cover
+    taxa_cover = results.total_taxa_cover
+
+    cover_median = Float64.(mapslices(median, total_cover, dims=[:scenarios]))
+    taxa_median = Float64.(mapslices(median, taxa_cover, dims=[:scenarios]))
+    taxa_evenness = _coral_evenness(taxa_median)
+
+    axlist = (
+        Dim{:timesteps}(start_year:end_year),
+        Dim{:sites}(location_ids)
+    )
+    cover_median = rebuild(cover_median, dims=axlist)
+    taxa_evenness = rebuild(taxa_evenness, dims=axlist)
+
+    arrays = Dict(
+        :total_relative_cover_median => cover_median,
+        :scaled_taxa_evenness => taxa_evenness
+    )
+    ds = Dataset(; arrays...)
+    savedataset(ds, path="$(result_store_dir)/$(fn)", driver=:netcdf, overwrite=true)
+
+    return nothing
+end
+
+"""
+    normalise(x, (a, b))
+
+Normalise the vector `x` so that it's minimum value is `a` and its maximum value is `b`.
+
+# Examples
+- `normalise([1, 5, 10, 78] (0,1))` to return a vector with min=0 and max=1.
+- `normalise([1, 5, 10, 78] (-1,1))` to return a vector with min=-1 and max=1.
+"""
+function normalise(x, (a, b))
+    x_norm = (b - a) .* ((x .- minimum(x)) ./ (maximum(x) .- minimum(x))) .+ a
+    return x_norm
+end
+
+function _coral_evenness(r_taxa_cover::AbstractArray{T})::AbstractArray{T} where {T<:Real}
+    # Evenness as a functional diversity metric
+    n_steps, n_locs, n_grps = size(r_taxa_cover)
+
+    # Sum across groups represents functional diversity
+    # Group evenness (Hill 1973, Ecology 54:427-432)
+    loc_cover = dropdims(sum(r_taxa_cover, dims=3), dims=3)
+    simpsons_diversity::YAXArray = ADRIA.ZeroDataCube((:timesteps, :locations), (n_steps, n_locs))
+    for loc in axes(loc_cover, 2)
+        simpsons_diversity[:, loc] = normalise((1.0 ./ sum((r_taxa_cover[:, loc, :] ./ loc_cover[:, loc]) .^ 2, dims=2)), (0,1)) .* normalise(loc_cover[:, loc], (0,1))
+    end
+
+    return replace!(simpsons_diversity, NaN => 0.0, Inf => 0.0) ./ n_grps
 end
