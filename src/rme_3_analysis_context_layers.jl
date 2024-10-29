@@ -15,6 +15,7 @@ import GeoDataFrames as GDF
 import GeoFormatTypes as GFT
 
 include("common.jl")
+include("custom_RMEDomain_dataloading.jl")
 
 # Load context layers with bioregions and target reefs
 context_layers = GDF.read("../data/context_layers_targetted_rme.gpkg")
@@ -103,6 +104,9 @@ context_layers = leftjoin(context_layers, source_to_sink; on=:RME_GBRMPA_ID, ord
 initial_cc = rs.total_relative_cover_median[1, :]
 context_layers.initial_coral_cover = initial_cc.data
 
+initial_evenness = rs.scaled_taxa_evenness[1, :]
+context_layers.initial_evenness = initial_evenness
+
 # species =
 # [
 # "tabular Acropora_2_1", "tabular Acropora_2_2",
@@ -128,8 +132,13 @@ dhw_time_scens = load_DHW("../../RME/rme_ml_2024_06_13/data_files/", "SSP245")
 dhw_time = Float64.(mapslices(median, dhw_time_scens, dims=[:scenarios]))
 dhw_locs = Float64.(mapslices(mean, dhw_time, dims=[:timesteps]))
 dhw_locs = DataFrame(mean_dhw = dhw_locs.data, RME_GBRMPA_ID = collect(getAxis("locs", dhw_locs).val))
+dhw_locs = dhw_locs[indexin(context_layers.RME_GBRMPA_ID, dhw_locs.RME_GBRMPA_ID), :] # Ensure same order between context_layers and dhw_locs
 
-context_layers = leftjoin(context_layers, dhw_locs, on=:RME_GBRMPA_ID, order=:left)
+if all(dhw_locs.RME_GBRMPA_ID .== context_layers.RME_GBRMPA_ID)
+    context_layers.mean_dhw = dhw_locs.mean_dhw
+else
+    @warn "Warning, mean DHW data not joined to context layers due to incorrect ordering"
+end
 
 # 4. Attach site data/area to context_layers
 # gbr_site_data = gbr_dom.site_data[:,[:UNIQUE_ID, :area]]
@@ -151,10 +160,14 @@ conn_mgmt_area = connectivity_scoring(mean_conn; gdf=context_layers, context_lay
 conn_subr_area = connectivity_scoring(mean_conn; gdf=context_layers, context_layer=:closest_port, conn_col_name=:conn_score_subr, by_layer=true)
 conn_bior_area = connectivity_scoring(mean_conn; gdf=context_layers, context_layer=:bioregion, conn_col_name=:conn_score_bior, by_layer=true)
 
-context_layers = leftjoin(context_layers, conn_whole_gbr, on=:RME_UNIQUE_ID, order=:left)
-context_layers = leftjoin(context_layers, conn_mgmt_area, on=:RME_UNIQUE_ID, order=:left)
-context_layers = leftjoin(context_layers, conn_subr_area, on=:RME_UNIQUE_ID, order=:left)
-context_layers = leftjoin(context_layers, conn_bior_area, on=:RME_UNIQUE_ID, order=:left)
+if all(conn_whole_gbr.RME_UNIQUE_ID .== context_layers.RME_UNIQUE_ID)
+    context_layers.conn_score = conn_whole_gbr.conn_score
+    context_layers.conn_score_mgmt = conn_mgmt_area.conn_score_mgmt
+    context_layers.conn_score_subr = conn_subr_area.conn_score_subr
+    context_layers.conn_score_bior = conn_bior_area.conn_score_bior
+else
+    @warn "Warning, connectivity data not joined to context layers due to incorrect ordering"
+end
 
 context_layers = weight_by_context(context_layers, :conn_score_mgmt, :management_area, :conn_ranked_mgmt)
 context_layers = weight_by_context(context_layers, :conn_score_subr, :closest_port, :conn_ranked_subr)

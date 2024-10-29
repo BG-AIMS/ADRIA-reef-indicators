@@ -353,18 +353,33 @@ function basic_target_reef_boxplot(
     categories, values;
     xlabel="Bellwether Reefs",
     ylabel="values",
-    xticks=["non-bellwether reefs", "bellwether reefs"],
-    title=""
+    xticks=unique(categories),
+    title="",
+    method=nothing
 )
     fig = Figure()
     target_reefs_axis = Axis(
         fig[1,1];
         xlabel = xlabel,
         ylabel = ylabel,
-        xticks = ([1.0,length(xticks)],xticks),
+        xticks = (unique(categories.refs), xticks),
         title=title
     )
-    f = boxplot!(target_reefs_axis, categories, values)
+
+    colors = [Makie.wong_colors(); Makie.wong_colors()];
+    legend_entries = []
+    for (i, col) in enumerate(unique(colors[indexin(categories, unique(categories))]))
+        LE = PolyElement(; color=col)
+        push!(legend_entries, [LE])
+    end
+
+    if method == "rainclouds"
+        f = rainclouds!(target_reefs_axis, categories.refs, values; color=colors[indexin(categories, unique(categories))], markersize=3, jitter_width=0.1, side_nudge=0.27)
+    else
+        f = boxplot!(target_reefs_axis, categories.refs, values; color=colors[indexin(categories, unique(categories))])
+    end
+
+    Legend(fig[1,2], legend_entries, unique(categories))
 
     display(fig)
 
@@ -397,7 +412,7 @@ end
 function timeseries_plot(data, target_reefs_col, length, ylabel, alpha)
     target_reefs = Matrix(
         DataFrames.select(
-            data[data[:, target_reefs_col] .== "non-bellwether", :],
+            data[data[:, target_reefs_col] .== "bellwether", :],
             DataFrames.Between(Symbol(length[1]), Symbol(length[2]))
         )
     )'
@@ -470,4 +485,20 @@ function lagged_timeseries_plot(data, target_reefs_col, length_t, xlab, ylab, al
     tellwidth=false, orientation=:horizontal, labelsize=10)
 
     return f
+end
+
+function explore_regression_scatter_plots(x, y; color=:blue, xlab="", ylab="", title="")
+
+    fig = Figure()
+    ax = Axis(
+        fig[1,1];
+        xlabel = xlab,
+        ylabel = ylab,
+        title = title
+    )
+    f = scatter!(
+        x, y; color=color
+    )
+
+    return fig
 end

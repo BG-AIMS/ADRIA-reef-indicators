@@ -19,20 +19,22 @@ lagged_numbers = DataFrame(
 )
 for row in eachrow(lagged_numbers)
     lag = row.lags
-    row.mgmt_leading_reefs = sum(lagged_analysis_mgmt[:,lag] .>= 0.8)
-    row.bior_leading_reefs = sum(lagged_analysis_bior[:, lag] .>= 0.8)
-    row.subr_leading_reefs = sum(lagged_analysis_subregion[:, lag] .>= 0.8)
+    row.mgmt_leading_reefs = sum(lagged_analysis_mgmt[:,lag] .>= 0.6)
+    row.bior_leading_reefs = sum(lagged_analysis_bior[:, lag] .>= 0.6)
+    row.subr_leading_reefs = sum(lagged_analysis_subregion[:, lag] .>= 0.6)
 
-    row.mgmt_leading_reefs_evenness = sum(lagged_analysis_mgmt_evenness[:,lag] .>= 0.8)
-    row.bior_leading_reefs_evenness = sum(lagged_analysis_bior_evenness[:, lag] .>= 0.8)
-    row.subr_leading_reefs_evenness = sum(lagged_analysis_subregion_evenness[:, lag] .>= 0.8)
+    row.mgmt_leading_reefs_evenness = sum(lagged_analysis_mgmt_evenness[:,lag] .>= 0.6)
+    row.bior_leading_reefs_evenness = sum(lagged_analysis_bior_evenness[:, lag] .>= 0.6)
+    row.subr_leading_reefs_evenness = sum(lagged_analysis_subregion_evenness[:, lag] .>= 0.6)
 end
 
 lagged_numbers_long = stack(lagged_numbers, 2:7)
 lagged_numbers_long.lags = vcat(fill(1:10, 6)...)
-lagged_numbers_long = lagged_numbers_long[lagged_numbers_long.lags .> 3 , :]
+lagged_numbers_long = lagged_numbers_long[lagged_numbers_long.lags .> 1 , :]
 lagged_numbers_long_7plus = lagged_numbers_long[lagged_numbers_long.lags .> 6, :]
 lagged_numbers_long_7plus.value_log = log10.((lagged_numbers_long_7plus.value .+ 1))
+
+
 
 # Plotting each reef at lags to ensure there are no missing lags that would be incorrect or hazardous.
 lags = 1:10

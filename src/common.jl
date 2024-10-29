@@ -1,5 +1,6 @@
 using Glob
 using Dates
+using CategoricalArrays
 
 using
     CSV,
@@ -467,69 +468,6 @@ function subregion_analysis(
     return lagged_analysis_sub
 end
 
-"""
-    DataCube(data::AbstractArray; kwargs...)::YAXArray
-
-Constructor for YAXArray. When used with `axes_names`, the axes labels will be UnitRanges
-from 1 up to that axis length.
-
-# Arguments
-- `data` : Array of data to be used when building the YAXArray
-- `axes_names` :
-"""
-function DataCube(data::AbstractArray; kwargs...)::YAXArray
-    return YAXArray(Tuple(Dim{name}(val) for (name, val) in kwargs), data)
-end
-function DataCube(data::AbstractArray, axes_names::Tuple)::YAXArray
-    return DataCube(data; NamedTuple{axes_names}(1:len for len in size(data))...)
-end
-
-function load_connectivity(
-    conn_path::String, loc_ids::Vector{String}
-)::Tuple{YAXArray, YAXArray}
-    conn_files = glob("*CONNECT_ACRO*", conn_path)
-    if isempty(conn_files)
-        ArgumentError("No CONNECT_ACRO data files found in: $(conn_path)")
-    end
-
-    n_locs = length(loc_ids)
-    tmp_mat = zeros(n_locs, n_locs, length(conn_files))
-    for (i, fn) in enumerate(conn_files)
-        # File pattern used is "CONNECT_ACRO_[YEAR]_[DAY].bin"
-        # We use a clunky regex approach to identify the year.
-        # tmp = replace(split(fn, r"(?=CONNECT_ACRO_[0-9,4]+)")[2], "CONNECT_ACRO_"=>"")
-        # year_id = split(tmp, "_")[1]
-
-        # Turns out, there's only data for each year so just read in directly
-        # Have to read in binary data - read first two values as Int32, and the rest
-        # as Float32. Then reshape into a square (n_locs * n_locs) matrix.
-        data = IOBuffer(read(fn))
-        x = read(data, Int32)
-        y = read(data, Int32)
-
-        ds = Vector{Float32}(undef, x * y)
-        tmp_mat[:, :, i] .= reshape(read!(data, ds), (n_locs, n_locs))
-    end
-
-    # Mean/stdev over all years
-    mean_conn_data::Matrix{Float64} = dropdims(mean(tmp_mat; dims=3); dims=3)
-    stdev_conn_data::Matrix{Float64} = dropdims(std(tmp_mat; dims=3); dims=3)
-
-    mean_conn = DataCube(
-        mean_conn_data;
-        Source=loc_ids,
-        Sink=loc_ids,
-    )
-
-    stdev_conn = DataCube(
-        stdev_conn_data;
-        Source=loc_ids,
-        Sink=loc_ids,
-    )
-
-    return mean_conn, stdev_conn
-end
-
 canonical_reefs = find_latest_file("../../canonical-reefs/output/")
 canonical_reefs = GDF.read(canonical_reefs)
 
@@ -645,7 +583,10 @@ function prepare_ReefMod_results(
     location_ids,
     start_year,
     end_year,
-    fn
+    fn,
+    evenness_method;
+    evenness_weight=1,
+    cover_weight=1
 )
     results = open_dataset("$(result_store_dir)/results.nc")
     total_cover = results.total_cover
@@ -653,7 +594,7 @@ function prepare_ReefMod_results(
 
     cover_median = Float64.(mapslices(median, total_cover, dims=[:scenarios]))
     taxa_median = Float64.(mapslices(median, taxa_cover, dims=[:scenarios]))
-    taxa_evenness = _coral_evenness(taxa_median)
+    taxa_evenness = _coral_evenness(taxa_median; method=evenness_method, evenness_weight=evenness_weight, cover_weight=cover_weight)
 
     axlist = (
         Dim{:timesteps}(start_year:end_year),
@@ -686,7 +627,7 @@ function normalise(x, (a, b))
     return x_norm
 end
 
-function _coral_evenness(r_taxa_cover::AbstractArray{T})::AbstractArray{T} where {T<:Real}
+function _coral_evenness(r_taxa_cover::AbstractArray{T}; method="scaled_evenness_multiplicative", evenness_weight=1, cover_weight=1)::AbstractArray{T} where {T<:Real}
     # Evenness as a functional diversity metric
     n_steps, n_locs, n_grps = size(r_taxa_cover)
 
@@ -694,9 +635,52 @@ function _coral_evenness(r_taxa_cover::AbstractArray{T})::AbstractArray{T} where
     # Group evenness (Hill 1973, Ecology 54:427-432)
     loc_cover = dropdims(sum(r_taxa_cover, dims=3), dims=3)
     simpsons_diversity::YAXArray = ADRIA.ZeroDataCube((:timesteps, :locations), (n_steps, n_locs))
-    for loc in axes(loc_cover, 2)
-        simpsons_diversity[:, loc] = normalise((1.0 ./ sum((r_taxa_cover[:, loc, :] ./ loc_cover[:, loc]) .^ 2, dims=2)), (0,1)) .* normalise(loc_cover[:, loc], (0,1))
+
+    if method == "scaled_evenness_multiplicative"
+        for loc in axes(loc_cover, 2)
+            simpsons_diversity[:, loc] = normalise((1.0 ./ sum((r_taxa_cover[:, loc, :] ./ loc_cover[:, loc]) .^ 2, dims=2)), (0,1)) .* (normalise(loc_cover[:, loc], (0,1)) ./ 2)
+        end
+    elseif method == "scaled_evenness_additive"
+        for loc in axes(loc_cover, 2)
+            simpsons_diversity[:, loc] = (evenness_weight .* normalise((1.0 ./ sum((r_taxa_cover[:, loc, :] ./ loc_cover[:, loc]) .^ 2, dims=2)), (0,1))) .+ (cover_weight .* normalise(loc_cover[:, loc], (0,1)))
+        end
+    elseif method == "normalised_evenness"
+        for loc in axes(loc_cover, 2)
+            simpsons_diversity[:, loc] = normalise((1.0 ./ sum((r_taxa_cover[:, loc, :] ./ loc_cover[:, loc]) .^ 2, dims=2)), (0,1))
+        end
+    elseif method == "raw_evenness"
+        for loc in axes(loc_cover, 2)
+            simpsons_diversity[:, loc] = (1.0 ./ sum((r_taxa_cover[:, loc, :] ./ loc_cover[:, loc]) .^ 2, dims=2))
+        end
+    elseif method == "shannon_index"
+        for loc in axes(loc_cover, 2)
+            simpsons_diversity[:, loc] = 1.0 ./ sum((r_taxa_cover[:, loc, :] ./ loc_cover[:, loc]) .* log.(r_taxa_cover[:, loc, :] ./ loc_cover[:, loc]), dims=2)
+        end
     end
 
     return replace!(simpsons_diversity, NaN => 0.0, Inf => 0.0) ./ n_grps
+end
+
+"""
+    extract_timeseries(rs_YAXArray, reefs, context_cols)
+
+Extract the timeseries data for each reef in `reefs` dataframe and attach `context_cols` from
+`reefs` to the output dataframe.
+
+# Arguments
+- `rs_YAXArray` : YAXArray containing sites that are RME_UNIQUE_IDs and timeseries data for 78 year timeseries.
+- `reefs` : Context dataframe containing the target reefs to keep and their context columns.
+- `context_cols` : Names of desired context columns for attaching to output timeseries dataframe
+"""
+function extract_timeseries(rs_YAXArray, reefs, context_cols)
+    df = DataFrame(rs_YAXArray.data, collect(getAxis("sites", rs_YAXArray).val))
+    df.year = [string(i) for i in 1:size(df,1)]
+    select!(df, :year, Not(:year))
+
+    data = permutedims(df, 1, "RME_UNIQUE_ID")
+    data = data[data.RME_UNIQUE_ID .∈ [reefs.RME_UNIQUE_ID],:]
+    data = leftjoin(data, reefs[:, vcat([:RME_UNIQUE_ID, context_cols]...)], on=:RME_UNIQUE_ID)
+    data = dropmissing(data)
+
+    return data
 end
