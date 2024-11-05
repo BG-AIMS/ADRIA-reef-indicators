@@ -27,7 +27,7 @@ n_reefs = length(reef_id_list)
 
 gcms = ["EC_Earth3_Veg", "UKESM1_0_LL", "GFDL-ESM4", "CNRM_ESM2_1"]
 
-reps = 100  # Used here to indicate total number of runs
+reps = 200  # Used here to indicate total number of runs
 
 for gcm in gcms
     # Initialize result store
