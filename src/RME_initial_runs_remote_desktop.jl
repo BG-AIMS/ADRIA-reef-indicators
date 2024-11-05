@@ -1,8 +1,5 @@
 using ReefModEngine, ADRIA
 using YAXArrays, NetCDF
-using GLMakie
-
-include("common.jl")
 
 # Initialize RME (may take a minute or two)
 init_rme("C:/Users/bgrier/Documents/Projects/RME/rme_ml_2024_06_13")
