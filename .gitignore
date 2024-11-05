@@ -23,4 +23,6 @@ docs/site/
 # environment.
 Manifest.toml
 
-outputs/ADRIA-out/
+outputs/
+figs/
+data/
