@@ -3,7 +3,7 @@ using YAXArrays, NetCDF
 
 # Initialize RME (may take a minute or two)
 init_rme("C:/Users/bgrier/Documents/Projects/RME/rme_ml_2024_06_13")
-# [ Info: Loaded RME 1.0.28
+output_dir = "..."
 
 # Set to use four threads
 set_option("thread_count", 6)
@@ -42,5 +42,5 @@ for gcm in gcms
 
     concat_results!(result_store, start_year, end_year, reps)
 
-    ReefModEngine.save_result_store(result_store, "../outputs/RME_result_stores/RME_SSP245_$(reps)reps_$(gcm)")
+    ReefModEngine.save_result_store(result_store, joinpath(output_dir, "RME_SSP245_$(reps)reps_$(gcm)"))
 end
