@@ -579,7 +579,7 @@ function weight_by_context(
 end
 
 function prepare_ReefMod_results(
-    result_store_dir,
+    result_store_dir::String,
     location_ids,
     start_year,
     end_year,
@@ -588,7 +588,7 @@ function prepare_ReefMod_results(
     evenness_weight=1,
     cover_weight=1
 )
-    results = open_dataset("$(result_store_dir)/results.nc")
+    results = open_dataset("$(result_store_dir)/results_no_duplicates.nc")
     total_cover = results.total_cover
     taxa_cover = results.total_taxa_cover
 
@@ -597,12 +597,44 @@ function prepare_ReefMod_results(
     taxa_evenness = _coral_evenness(taxa_median; method=evenness_method, evenness_weight=evenness_weight, cover_weight=cover_weight)
 
     axlist = (
-        Dim{:timesteps}(start_year:end_year),
-        Dim{:sites}(location_ids)
+                Dim{:timesteps}(start_year:end_year),
+                Dim{:sites}(location_ids)
     )
     cover_median = rebuild(cover_median, dims=axlist)
     taxa_evenness = rebuild(taxa_evenness, dims=axlist)
+    arrays = Dict(
+        :total_relative_cover_median => cover_median,
+        :scaled_taxa_evenness => taxa_evenness
+    )
+    ds = Dataset(; arrays...)
+    savedataset(ds, path="$(result_store_dir)/$(fn)", driver=:netcdf, overwrite=true)
 
+    return nothing
+end
+
+function prepare_ReefMod_results(
+    results::YAXArrays.Dataset,
+    location_ids,
+    start_year,
+    end_year,
+    fn,
+    evenness_method;
+    evenness_weight=1,
+    cover_weight=1
+)
+    total_cover = results.total_cover
+    taxa_cover = results.total_taxa_cover
+
+    cover_median = Float64.(mapslices(median, total_cover, dims=[:scenarios]))
+    taxa_median = Float64.(mapslices(median, taxa_cover, dims=[:scenarios]))
+    taxa_evenness = _coral_evenness(taxa_median; method=evenness_method, evenness_weight=evenness_weight, cover_weight=cover_weight)
+
+    axlist = (
+                Dim{:timesteps}(start_year:end_year),
+                Dim{:sites}(location_ids)
+    )
+    cover_median = rebuild(cover_median, dims=axlist)
+    taxa_evenness = rebuild(taxa_evenness, dims=axlist)
     arrays = Dict(
         :total_relative_cover_median => cover_median,
         :scaled_taxa_evenness => taxa_evenness
@@ -638,11 +670,15 @@ function _coral_evenness(r_taxa_cover::AbstractArray{T}; method="scaled_evenness
 
     if method == "scaled_evenness_multiplicative"
         for loc in axes(loc_cover, 2)
-            simpsons_diversity[:, loc] = normalise((1.0 ./ sum((r_taxa_cover[:, loc, :] ./ loc_cover[:, loc]) .^ 2, dims=2)), (0,1)) .* (normalise(loc_cover[:, loc], (0,1)) ./ 2)
+            norm_evenness = normalise((1.0 ./ sum((r_taxa_cover[:, loc, :] ./ loc_cover[:, loc]) .^ 2, dims=2)), (0,1))
+            norm_loc_cover = normalise(loc_cover[:, loc], (0,1))
+            simpsons_diversity[:, loc] = norm_evenness .* norm_loc_cover
         end
     elseif method == "scaled_evenness_additive"
         for loc in axes(loc_cover, 2)
-            simpsons_diversity[:, loc] = (evenness_weight .* normalise((1.0 ./ sum((r_taxa_cover[:, loc, :] ./ loc_cover[:, loc]) .^ 2, dims=2)), (0,1))) .+ (cover_weight .* normalise(loc_cover[:, loc], (0,1)))
+            norm_evenness = normalise((1.0 ./ sum((r_taxa_cover[:, loc, :] ./ loc_cover[:, loc]) .^ 2, dims=2)), (0,1))
+            norm_loc_cover = normalise(loc_cover[:, loc], (0,1))
+            simpsons_diversity[:, loc] = (evenness_weight .* norm_evenness) .+ (cover_weight .* norm_loc_cover)
         end
     elseif method == "normalised_evenness"
         for loc in axes(loc_cover, 2)

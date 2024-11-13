@@ -100,38 +100,20 @@ for reef in eachindex(reefs)
 end
 context_layers = leftjoin(context_layers, source_to_sink; on=:RME_GBRMPA_ID, order=:left)
 
+rs = open_dataset("../outputs/RME_result_stores/RME_SSP245_200reps/median_GCM_cover_and_evenness_2024_11_11.nc"; driver=:netcdf)
 # 2. Attach initial coral cover data to context_layers
-initial_cc = rs.total_relative_cover_median[1, :]
+initial_cc = rs.total_relative_cover[1, :]
 context_layers.initial_coral_cover = initial_cc.data
 
 initial_evenness = rs.scaled_taxa_evenness[1, :]
 context_layers.initial_evenness = initial_evenness
 
-# species =
-# [
-# "tabular Acropora_2_1", "tabular Acropora_2_2",
-# "tabular Acropora_2_3", "tabular Acropora_2_4", "tabular Acropora_2_5", "tabular Acropora_2_6", "tabular Acropora_2_7",
-# "corymbose Acropora_3_1", "corymbose Acropora_3_2", "corymbose Acropora_3_3", "corymbose Acropora_3_4",
-# "corymbose Acropora_3_5", "corymbose Acropora_3_6", "corymbose Acropora_3_7", "corymbose non-Acropora_4_1", "corymbose non-Acropora_4_2",
-# "corymbose non-Acropora_4_3", "corymbose non-Acropora_4_4", "corymbose non-Acropora_4_5", "corymbose non-Acropora_4_6", "corymbose non-Acropora_4_7",
-# "Small massives_5_1", "Small massives_5_2", "Small massives_5_3", "Small massives_5_4", "Small massives_5_5",
-# "Small massives_5_6", "Small massives_5_7", "Large massives_6_1", "Large massives_6_2", "Large massives_6_3",
-# "Large massives_6_4", "Large massives_6_5", "Large massives_6_6", "Large massives_6_7"
-# ]
-# spec_groups = getindex.(species, [1:15])
-
-# icc = DataFrame(Matrix(initial_cc.data), collect(getAxis("locs", initial_cc).val))
-# icc.spec_groups = spec_groups
-# gdf = DataFrames.groupby(icc, :spec_groups)
-# mapcols(gdf, sum)
-
-
 # 3. Attach DHW data to context_layers
 # mean DHW data for sites
 dhw_time_scens = load_DHW("../../RME/rme_ml_2024_06_13/data_files/", "SSP245")
 dhw_time = Float64.(mapslices(median, dhw_time_scens, dims=[:scenarios]))
-dhw_locs = Float64.(mapslices(mean, dhw_time, dims=[:timesteps]))
-dhw_locs = DataFrame(mean_dhw = dhw_locs.data, RME_GBRMPA_ID = collect(getAxis("locs", dhw_locs).val))
+dhw_locs = Float64.(mapslices(mean, dhw_time[1:50, :], dims=[:timesteps])) # Select only the years in relevant time
+dhw_locs = DataFrame(mean_dhw = vec(dhw_locs.data), RME_GBRMPA_ID = collect(getAxis("locs", dhw_locs).val))
 dhw_locs = dhw_locs[indexin(context_layers.RME_GBRMPA_ID, dhw_locs.RME_GBRMPA_ID), :] # Ensure same order between context_layers and dhw_locs
 
 if all(dhw_locs.RME_GBRMPA_ID .== context_layers.RME_GBRMPA_ID)
@@ -140,9 +122,24 @@ else
     @warn "Warning, mean DHW data not joined to context layers due to incorrect ordering"
 end
 
-# 4. Attach site data/area to context_layers
-# gbr_site_data = gbr_dom.site_data[:,[:UNIQUE_ID, :area]]
-# context_layers = leftjoin(context_layers, gbr_site_data; on=:UNIQUE_ID, order=:left)
+rel_cover = rs.total_relative_cover
+evenness_data = rs.scaled_taxa_evenness
+
+context_layers.dhw_cover_cor .= 0.0
+context_layers.dhw_evenness_cor .= 0.0
+
+for reef in eachrow(context_layers)
+    reef_cover = rel_cover[sites = At(reef.RME_UNIQUE_ID)]
+    reef_evenness = evenness_data[sites = At(reef.RME_UNIQUE_ID)]
+
+    reef_dhw = dhw_time[locs = At(reef.RME_GBRMPA_ID)]
+    reef_dhw.data .= -1 * reef_dhw.data
+
+    cover_correlation = cross_correlation(reef_cover, reef_dhw, [0], true)
+    evenness_correlation = cross_correlation(reef_evenness, reef_dhw, [0], true)
+    reef.dhw_cover_cor = first(cover_correlation)
+    reef.dhw_evenness_cor = first(evenness_correlation)
+end
 
 # 5. Calculate the number of reefs in each bioregion
 context_layers.bioregion_count .= 1

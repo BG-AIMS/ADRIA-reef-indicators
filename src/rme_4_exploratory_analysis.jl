@@ -6,12 +6,13 @@ bioregions.
 
 include("common.jl")
 include("plotting_functions.jl")
+include("custom_RMEDomain_dataloading.jl")
 
 using DataFrames, Statistics, YAXArrays
 
 using GLMakie, GeoMakie, GraphMakie
 
-using GLM
+using GLM, MixedModels
 
 using ADRIA
 
@@ -19,8 +20,10 @@ import GeoDataFrames as GDF
 
 # Load updated context layer data
 context_layers = GDF.read("../data/analysis_context_layers_rme.gpkg",)
+context_layers = context_layers[context_layers.bioregion .!= "NA", :]
 context_layers.target_reefs_bior_cat = ifelse.(context_layers.target_reefs_bior, "bellwether", "non-bellwether")
 context_layers.target_reefs_bior_evenness_cat = ifelse.(context_layers.target_reefs_bior_evenness, "bellwether", "non-bellwether")
+
 analysis_levels = ["target_reefs_mgmt", "target_reefs_subr", "target_reefs_bior", "target_reefs_mgmt_evenness", "target_reefs_subr_evenness","target_reefs_bior_evenness"]
 
 context_target_reefs = DataFrame(
@@ -79,8 +82,8 @@ bior_evenness_reefs = context_layers[context_layers.target_reefs_bior_evenness, 
 # Coral Cover Analysis
 # Load rel_cover data and identify reefs that crash in the first timeseries year
 
-rs = open_dataset("../outputs/RME_result_stores/RME_SSP245_20reps/cover_and_evenness_2024_11_4.nc")
-rel_cover = rs.total_relative_cover_median
+rs = open_dataset("../outputs/RME_result_stores/RME_SSP245_200reps/median_GCM_cover_and_evenness_2024_11_11.nc")
+rel_cover = rs.total_relative_cover
 #crash_reefs = collect(getAxis("sites", rel_cover).val)[rel_cover.data[2,:] .< 0.5]
 
 # Remove crashing reefs
@@ -89,6 +92,8 @@ rel_cover = rs.total_relative_cover_median
 # Filter to only include reefs that are within the same bioregion/closest_port subregion as target reefs
 filtered_bior = context_layers[context_layers.bioregion .∈ [unique(context_layers[context_layers.target_reefs_bior_cat .== "bellwether", :bioregion])], :]
 filtered_bior = filtered_bior[filtered_bior.so_to_si .< quantile(filtered_bior.so_to_si, 0.95), :]
+filtered_bior = filtered_bior[filtered_bior.conn_score .< quantile(filtered_bior.conn_score, 0.95), :]
+filtered_bior = filtered_bior[filtered_bior.bioregion .∈ [unique(filtered_bior[filtered_bior.target_reefs_bior_cat .== "bellwether", :bioregion])], :]
 
 # Basic exploratory models of factors
 #glm_allreefs = glm(@formula(target_reefs_bior ~ out_comb + dhw_cor ), no_crash_gbr, Binomial())
@@ -98,8 +103,45 @@ glm_bioregions = glm(@formula(target_reefs_bior ~ mean_dhw + so_to_si + conn_sco
 # aic(glm_allreefs), aic(glm_bioregions), aic(glm_subregions)
 
 glmm_form = @formula(target_reefs_bior ~ mean_dhw + so_to_si + conn_score + total_strength + initial_coral_cover + (1|bioregion))
-glmm_fit = fit(MixedModel, glmm_form, filtered_bior, Binomial(), ProbitLink())
+glmm_fit = fit(MixedModel, glmm_form, filtered_bior, Binomial(), LogitLink())
 # aic(glmm_fit) # seems to be an improvement when (1|bioregion) is used
+
+# Plotting bioregion raincloud plots for each variable
+mean_dhw_raincloud = bioregion_grouped_boxplots(
+    filtered_bior,
+    :target_reefs_bior_cat,
+    :bioregion, :mean_dhw, 3,
+    ylabel="mean DHW"
+)
+
+so_to_si_raincloud = bioregion_grouped_boxplots(
+    filtered_bior,
+    :target_reefs_bior_cat,
+    :bioregion, :so_to_si, 3,
+    ylabel="Source to sink ratio"
+)
+
+conn_score_raincloud = bioregion_grouped_boxplots(
+    filtered_bior,
+    :target_reefs_bior_cat,
+    :bioregion, :conn_score, 3,
+    ylabel="Connectivity eigenvector centrality"
+)
+
+
+total_strength_raincloud = bioregion_grouped_boxplots(
+    filtered_bior,
+    :target_reefs_bior_cat,
+    :bioregion, :total_strength, 3,
+    ylabel="Total connectivity strength"
+)
+
+initial_cover_raincloud = bioregion_grouped_boxplots(
+    filtered_bior,
+    :target_reefs_bior_cat,
+    :bioregion, :initial_coral_cover, 3,
+    ylabel="Initial coral cover (%)"
+)
 
 bior_reefs_dhw = basic_target_reef_boxplot(
     categorical(filtered_bior.target_reefs_bior_cat),
@@ -157,7 +199,7 @@ combined_boxplot_bior_reefs = combined_bellwether_reef_boxplot(
 )
 save("../figs/bior_reefs_combined_boxplot.png", combined_boxplot_bior_reefs)
 
-rel_cover = rs.total_relative_cover_median
+rel_cover = rs.total_relative_cover
 rel_cover_reefs = extract_timeseries(rel_cover, context_layers, [:bioregion, :lag4_bior, :target_reefs_bior_cat])
 rel_cover_reefs = rel_cover_reefs[.!(Bool.(context_layers.bior_cover_qc_flag)), :]
 rel_cover_reefs = rel_cover_reefs[rel_cover_reefs.RME_UNIQUE_ID .∈ [filtered_bior.RME_UNIQUE_ID], :]
@@ -175,6 +217,7 @@ save("../figs/bior_reefs_combined_timeseries.png", lagged_ts_combined_bior)
 filtered_bior_evenness = context_layers[context_layers.bioregion .∈ [unique(context_layers[context_layers.target_reefs_bior_evenness_cat .== "bellwether", :bioregion])], :]
 filtered_bior_evenness = filtered_bior_evenness[filtered_bior_evenness.so_to_si .< quantile(filtered_bior_evenness.so_to_si, 0.95), :]
 filtered_bior_evenness = filtered_bior_evenness[filtered_bior_evenness.conn_score .< quantile(filtered_bior_evenness.conn_score, 0.95), :]
+filtered_bior_evenness = filtered_bior_evenness[filtered_bior_evenness.bioregion .∈ [unique(filtered_bior_evenness[filtered_bior_evenness.target_reefs_bior_evenness_cat .== "bellwether", :bioregion])], :]
 
 evenness = rs.scaled_taxa_evenness
 evenness = rs.scaled_taxa_evenness
@@ -200,8 +243,6 @@ glm_bioregions = glm(@formula(target_reefs_bior_evenness ~ mean_dhw + so_to_si +
 glmm_form = @formula(target_reefs_bior_evenness ~ mean_dhw + so_to_si + conn_score + total_strength + initial_coral_cover + (1|bioregion))
 glmm_fit = fit(MixedModel, glmm_form, filtered_bior_evenness, Binomial())
 aic(glmm_fit) # seems to be an improvement when (1|bioregion) is used
-
-
 
 bior_evenness_dhw = basic_target_reef_boxplot(
     categorical(filtered_bior_evenness_no_zeros.target_reefs_bior_evenness_cat),
@@ -248,14 +289,15 @@ save("../figs/bior_evenness_initial_coral_cover.png", bior_evenness_initial_cove
 bior_evnness_initial_evenness = basic_target_reef_boxplot(
     categorical(filtered_bior_evenness_no_zeros.target_reefs_bior_evenness_cat),
     filtered_bior_evenness_no_zeros.initial_evenness;
-    ylabel="Initial Evenness Metric"
+    ylabel="Initial Evenness Metric",
+    method="rainclouds"
 )
 
 # Plotting bioregion raincloud plots for each variable
 mean_dhw_raincloud_evenness = bioregion_grouped_boxplots(
     filtered_bior_evenness,
     :target_reefs_bior_evenness_cat,
-    :bioregion, :mean_dhw,
+    :bioregion, :mean_dhw, 7,
     ylabel="mean DHW"
 )
 save("../figs/bior_evenness_bioregion_dhw.png", mean_dhw_raincloud_evenness)
@@ -263,7 +305,7 @@ save("../figs/bior_evenness_bioregion_dhw.png", mean_dhw_raincloud_evenness)
 so_to_si_raincloud_evenness = bioregion_grouped_boxplots(
     filtered_bior_evenness,
     :target_reefs_bior_evenness_cat,
-    :bioregion, :so_to_si,
+    :bioregion, :so_to_si, 7,
     ylabel="Source to sink ratio"
 )
 save("../figs/bior_evenness_bioregion_so_to_si.png", so_to_si_raincloud_evenness)
@@ -271,7 +313,7 @@ save("../figs/bior_evenness_bioregion_so_to_si.png", so_to_si_raincloud_evenness
 conn_score_raincloud_evenness = bioregion_grouped_boxplots(
     filtered_bior_evenness,
     :target_reefs_bior_evenness_cat,
-    :bioregion, :conn_score,
+    :bioregion, :conn_score, 6,
     ylabel="Connectivity eigenvector centrality"
 )
 save("../figs/bior_evenness_bioregion_conn_score.png", conn_score_raincloud_evenness)
@@ -279,7 +321,7 @@ save("../figs/bior_evenness_bioregion_conn_score.png", conn_score_raincloud_even
 total_strength_raincloud_evenness = bioregion_grouped_boxplots(
     filtered_bior_evenness,
     :target_reefs_bior_evenness_cat,
-    :bioregion, :total_strength,
+    :bioregion, :total_strength, 7,
     ylabel="Total connectivity strength"
 )
 save("../figs/bior_evenness_bioregion_total_strength.png", total_strength_raincloud_evenness)
@@ -287,7 +329,7 @@ save("../figs/bior_evenness_bioregion_total_strength.png", total_strength_raincl
 initial_cover_raincloud_evenness = bioregion_grouped_boxplots(
     filtered_bior_evenness,
     :target_reefs_bior_evenness_cat,
-    :bioregion, :initial_coral_cover,
+    :bioregion, :initial_coral_cover, 7,
     ylabel="Initial coral cover (%)"
 )
 save("../figs/bior_evenness_bioregion_initial_cover.png", initial_cover_raincloud_evenness)
@@ -345,15 +387,15 @@ lagged_ts = timeseries_plot(data, :target_reefs_bior_evenness, (1, 78), "Scaled 
 # looking at the timing of dhw stress
 dhw_data = load_DHW("../../RME/rme_ml_2024_06_13/data_files/", "SSP245")
 dhw_ts = Float64.(mapslices(median, dhw_data, dims=[:scenarios]))
+dhw_ts = dhw_ts[locs = At(context_layers.RME_GBRMPA_ID)]
 axlist = (
     Dim{:timesteps}(2022:2099),
     Dim{:sites}(context_layers.RME_UNIQUE_ID)
 )
 dhw_ts = rebuild(dhw_ts, dims=axlist)
 
-bior_reefs_dhw = extract_timeseries(dhw_ts, filtered_bior_no_zeros, [:bioregion, :lag4_bior_evenness, :target_reefs_bior_evenness])
-bior_reefs_dhw.target_reefs_bior_evenness = ifelse.(bior_reefs_dhw.target_reefs_bior_evenness, "bellwether", "non-bellwether")
-bior_evenness_dhw = timeseries_plot(bior_reefs_dhw, :target_reefs_bior_evenness, (1,50), "median scenario DHW", 0.05)
+bior_reefs_dhw = extract_timeseries(dhw_ts, filtered_bior_evenness, [:bioregion, :lag4_bior_evenness, :target_reefs_bior_evenness_cat])
+bior_evenness_dhw = timeseries_plot(bior_reefs_dhw, :target_reefs_bior_evenness_cat, (1,50), "median scenario DHW", 0.05)
 save("../figs/evenness_bellwether_dhw_timeseries.png", bior_evenness_dhw)
 
 bioregions = unique(filtered_bior_evenness.bioregion)

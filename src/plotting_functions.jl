@@ -686,7 +686,7 @@ function combined_bellwether_reef_boxplot(
 end
 
 function bioregion_grouped_boxplots(
-    dataframe, bellwether_reefs_col, grouping, variable;
+    dataframe, bellwether_reefs_col, grouping, variable, ncol;
     xlabel="Bellwether Reefs",
     ylabel="Value",
     xticks=unique(dataframe[:, bellwether_reefs_col]),
@@ -697,12 +697,6 @@ function bioregion_grouped_boxplots(
     categories = categorical(dataframe[:, bellwether_reefs_col])
 
     gdf = DataFrames.groupby(dataframe, grouping)
-
-    if length(unique(dataframe.bioregion)) == 18
-        ind = CartesianIndices(reshape(1:length(gdf),:,6))
-    elseif length(unique(dataframe.bioregion)) == 8
-        ind = CartesianIndices(reshape(1:length(gdf),:,4))
-    end
 
     if length(gdf) < 27
         labels = string.(collect('a':'z'))[1:length(gdf)]
@@ -735,10 +729,10 @@ function bioregion_grouped_boxplots(
         yticks = Makie.automatic
     end
 
-    if variable == :conn_score
-        xsize = 120
+    if length(gdf) < 10
+        xsize, ysize = 180, 120
     else
-        xsize = 140
+        xsize, ysize = 110, 110
     end
 
     for (xi, groupdf) in enumerate(gdf)
@@ -757,20 +751,20 @@ function bioregion_grouped_boxplots(
         end
 
         ax = Axis(
-            fig[ind[xi][1],ind[xi][2]];
+            fig[fldmod1(xi, ncol)...];
             backgroundcolor=background_color,
             xlabel = xlabel,
             xlabelsize = 10,
             ylabelsize = 10,
             ylabel = ylabel,
             xticks = (unique(categories.refs), xticks),
-            xticklabelsize=10,
+            xticklabelsize=9,
             limits= limits,
             yticks = yticks,
-            yticklabelsize=10,
+            yticklabelsize=9,
             title=title,
             width=xsize,
-            height=110
+            height=ysize
         )
 
         f = rainclouds!(
@@ -790,7 +784,7 @@ function bioregion_grouped_boxplots(
         end
 
         Label(
-            fig[ind[xi][1],ind[xi][2], TopLeft()],
+            fig[fldmod1(xi, ncol)..., TopLeft()],
             labels[xi],
             fontsize = 15,
             font = :bold,
@@ -799,7 +793,7 @@ function bioregion_grouped_boxplots(
         )
     end
 
-    Legend(fig[4, 1:6], legend_entries, unique(categories), nbanks=2)
+    Legend(fig[first(fldmod1(length(gdf), ncol)) + 1, 1:ncol], legend_entries, unique(categories), nbanks=2)
     resize_to_layout!(fig)
 
     display(fig)
