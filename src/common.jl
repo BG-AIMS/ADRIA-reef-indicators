@@ -684,3 +684,139 @@ function extract_timeseries(rs_YAXArray, reefs, context_cols)
 
     return data
 end
+
+"""
+    remove_duplicate_reps(rs_dataset, start_year, end_year, location_ids, n_reps)
+
+Find the indices of unique scenarios when there are duplicated scenarios and rebuild
+the scenarios axis in `rebuild_RME_dataset()` to contain only a single copy of unique scenarios.
+"""
+function remove_duplicate_reps(rs_dataset, start_year, end_year, location_ids, n_reps)
+    cover = rs_dataset.total_cover
+
+    for year_reef1 in cover.timesteps
+        cover_scen = cover[At(year_reef1),1,:]
+        if size(unique(cover_scen.data), 1) == n_reps
+            global unique_indices = unique(i -> cover_scen.data[i], 1:length(cover_scen.data))
+            @info "200 unique reps found."
+            break
+        end
+    end
+
+    rs_dataset = rebuild_RME_dataset(
+        rs_dataset,
+        start_year, end_year,
+        location_ids,
+        n_reps,
+        unique_indices
+    )
+
+    return rs_dataset
+end
+
+"""
+    rebuild_RME_dataset(
+        rs_dataset, 
+        start_year, 
+        end_year, 
+        location_ids, 
+        n_reps, 
+        unique_indices
+    )
+
+Rebuild a RME dataset that has duplicated scenarios. For example, when RME outputs counterfactual runs with duplicate scenario data.
+
+# Arguments
+- `rs_dataset` : The RME dataset with duplicated scenarios.
+- `start_year` : Start year of timesteps dimension.
+- `end_year` : End year of timesteps dimension.
+- `location_ids` : Location IDs to be held in sites dimension. 
+- `n_reps` : The intended number of scenarios that should be in the returned dataset (after removing duplicate scenarios).
+- `unique_indices` : The first index of each unique scenario to keep (excludes indices of duplicate scenarios).
+"""
+function rebuild_RME_dataset(
+    rs_dataset, 
+    start_year, 
+    end_year, 
+    location_ids, 
+    n_reps, 
+    unique_indices
+)
+    variable_keys = keys(rs_dataset.cubes)
+
+    arrays = Dict()
+    for variable in variable_keys
+        if variable == :total_taxa_cover
+            axlist = (
+                Dim{:timesteps}(start_year:end_year),
+                Dim{:sites}(location_ids),
+                Dim{:taxa}(1:6),
+                Dim{:scenarios}(1:n_reps)
+            )
+        else
+            axlist = (
+                Dim{:timesteps}(start_year:end_year),
+                Dim{:sites}(location_ids),
+                Dim{:scenarios}(1:n_reps)
+            )
+        end
+
+        # Remove duplicated scenarios
+        yarray = rs_dataset[variable][scenarios = unique_indices]
+        # Rebuild to ensure correct scenario lookup axis.
+        yarray = rebuild(yarray, dims=axlist)
+        push!(arrays, variable => yarray)
+    end
+
+    return Dataset(; arrays...)
+end
+
+"""
+    concat_RME_netcdfs(dataset_1, dataset_s...)
+
+Combine RME result netcdf datasets along the `scenarios` dimension to 
+combine scenarios that have been run separately into a single dataset.
+
+# Example
+results_dataset_300scens = concat_RME_netcdfs(
+    results_dataset_200scens, 
+    results_dataset_50scens, 
+    results_dataset_50scens
+)
+"""
+function concat_RME_netcdfs(dataset_1, dataset_s...)
+    variable_keys = keys(dataset_1.cubes)
+    Xin = [dataset_1, dataset_s...]
+    arrays = Dict()
+    
+    for variable in variable_keys
+        if variable == :total_taxa_cover
+            yarrays = [x[variable] for x in Xin]
+            yarray = YAXArrays.cat(yarrays...; dims=4) # In RME YAXArrays with taxa the 4th dimension is scenarios
+
+            # For some reason after concattenating you need to rebuild the scenario axis
+            axlist = (
+                yarray.axes[1],
+                yarray.axes[2],
+                yarray.axes[3],
+                Dim{:scenarios}(1:size(yarray,4))
+            )
+            yarray = rebuild(yarray, dims=axlist)
+        else
+            yarrays = [x[variable] for x in Xin]
+            yarray = YAXArrays.cat(yarrays...; dims=3) # In RME YAXArrays without taxa the 3rd dimension is scenarios
+
+            # For some reason after concattenating you need to rebuild the scenario axis
+            axlist = (
+                yarray.axes[1],
+                yarray.axes[2],
+                Dim{:scenarios}(1:size(yarray,3))
+            )
+            yarray = rebuild(yarray, dims=axlist)
+        end
+        
+        push!(arrays, variable => yarray)
+    end
+
+    return Dataset(; arrays...)
+end
