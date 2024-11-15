@@ -693,7 +693,7 @@ function bioregion_grouped_boxplots(
     title="",
     method=nothing
 )
-    dataframe = sort(dataframe, bellwether_reefs_col; rev=true)
+    dataframe = sort(dataframe, [bellwether_reefs_col, :management_area]; rev=true)
     categories = categorical(dataframe[:, bellwether_reefs_col])
 
     gdf = DataFrames.groupby(dataframe, grouping)
@@ -704,36 +704,56 @@ function bioregion_grouped_boxplots(
         error("number of bioregions > 26 (number of letters for labelling)")
     end
 
-    fig = Figure(backgroundcolor = RGBf(0.98, 0.98, 0.98), size = (1000, 700))
+    fig = Figure(backgroundcolor = RGBf(0.98, 0.98, 0.98), size = (2130, 1500))
 
     colors = [Makie.wong_colors(); Makie.wong_colors()];
     legend_entries = []
     for (i, col) in enumerate(unique(colors[indexin(categories, unique(categories))]))
-        LE = PolyElement(; color=col)
+        LE = MarkerElement(; color=col, marker=:circle)
         push!(legend_entries, [LE])
     end
 
     min_var, max_var = extrema(dataframe[:, variable])
     var_difference = max_var - min_var
-    if variable ∈ [:mean_dhw, :so_to_si]
-        limits = (nothing, (floor(Int64, min_var - 2), ceil(Int64, max_var + 2)))
-        yticks = round.(Int64, min_var:2:max_var)
-    elseif variable == :initial_coral_cover
-        limits = (nothing, (floor(Int64, min_var - 5), ceil(Int64, max_var + 5)))
-        yticks = round.(Int64, min_var:10:max_var)
-    elseif variable == :total_strength
-        limits = (nothing, (round(min_var - 0.3, digits=2), round(max_var + 0.3, digits=2)))
-        yticks = round.(min_var:0.5:max_var, digits=1)
-    elseif variable == :conn_score
-        limits = (nothing, nothing)
-        yticks = Makie.automatic
+    # if variable ∈ [:mean_dhw, :so_to_si]
+    #     limits = (nothing, (floor(Int64, min_var - 2), ceil(Int64, max_var + 2)))
+    #     yticks = round.(Int64, min_var:2:max_var)
+    # elseif variable == :initial_coral_cover
+    #     limits = (nothing, (floor(Int64, min_var - 5), ceil(Int64, max_var + 5)))
+    #     yticks = round.(Int64, min_var:10:max_var)
+    # elseif variable == :total_strength
+    #     limits = (nothing, (round(min_var - 0.3, digits=2), round(max_var + 0.3, digits=2)))
+    #     yticks = round.(min_var:0.5:max_var, digits=1)
+    # elseif variable ∈ [:dhw_cover_cor, :dhw_evenness_cor]
+    #     limits = (nothing, (-1.1,1.1))
+    #     yticks = (-1:0.5:1)
+    # elseif variable == :conn_score
+    #     limits = (nothing, nothing)
+    #     yticks = Makie.automatic
+    # end
+
+    if var_difference < 4
+        limits = (nothing, (min_var - (var_difference/5), max_var + (var_difference/5)))
+        yticks = round.(min_var:(var_difference / 4):max_var; digits=3)
+    else
+        limits = (nothing, (floor(Int64, min_var - 1), ceil(Int64, max_var + 1)))
+        yticks = round.(min_var:(var_difference / 4):max_var; digits=1)
     end
 
     if length(gdf) < 10
         xsize, ysize = 180, 120
+        label_size = 12
     else
-        xsize, ysize = 110, 110
+        xsize, ysize = 150, 150
+        label_size = 12
     end
+
+    management_areas = Dict(
+        "Far Northern Management Area" => (:red, 0.7),
+        "Cairns/Cooktown Management Area" => (:green, 0.7),
+        "Townsville/Whitsunday Management Area" => (:blue, 0.7),
+        "Mackay/Capricorn Management Area" => (:Orange, 0.7)
+    )
 
     for (xi, groupdf) in enumerate(gdf)
         categories = categorical(groupdf[:, bellwether_reefs_col])
@@ -750,23 +770,38 @@ function bioregion_grouped_boxplots(
             background_color = :white
         end
 
-        ax = Axis(
-            fig[fldmod1(xi, ncol)...];
-            backgroundcolor=background_color,
-            xlabel = xlabel,
-            xlabelsize = 10,
-            ylabelsize = 10,
-            ylabel = ylabel,
-            xticks = (unique(categories.refs), xticks),
-            xticklabelsize=9,
-            limits= limits,
-            yticks = yticks,
-            yticklabelsize=9,
-            title=title,
-            width=xsize,
-            height=ysize
-        )
-
+        if xi == 1
+            ax = Axis(
+                fig[fldmod1(xi, ncol)...];
+                backgroundcolor=background_color,
+                xlabel = xlabel,
+                xlabelsize = label_size+1,
+                ylabelsize = label_size+1,
+                ylabel = ylabel,
+                xticks = (unique(categories.refs), xticks),
+                xticklabelsize=label_size,
+                limits= limits,
+                yticks = yticks,
+                yticklabelsize=label_size,
+                title=title,
+                width=xsize,
+                height=ysize
+            )
+        else
+            ax = Axis(
+                fig[fldmod1(xi, ncol)...];
+                backgroundcolor=background_color,
+                xticklabelsize=label_size,
+                yticklabelsize=label_size,
+                xticks = (unique(categories.refs), ["",""]),
+                xticksvisible=false,
+                limits= limits,
+                yticks = yticks,
+                title=title,
+                width=xsize,
+                height=ysize
+            )
+        end
         f = rainclouds!(
             ax,
             categories.refs,
@@ -783,9 +818,11 @@ function bioregion_grouped_boxplots(
             hlines!(1; color=(:gray, 0.7))
         end
 
+        bioregion_label_color = management_areas[first(unique(groupdf.management_area))]
         Label(
             fig[fldmod1(xi, ncol)..., TopLeft()],
             labels[xi],
+            color = bioregion_label_color,
             fontsize = 15,
             font = :bold,
             padding = (0, 5, 5, 0),
@@ -793,10 +830,212 @@ function bioregion_grouped_boxplots(
         )
     end
 
-    Legend(fig[first(fldmod1(length(gdf), ncol)) + 1, 1:ncol], legend_entries, unique(categories), nbanks=2)
+    last_figure = fldmod1(length(gdf), ncol)
+    if last_figure[2] < ncol
+        Legend(fig[last_figure[1], last_figure[2]+1:ncol], legend_entries, unique(categories), nbanks=1)
+    else
+        Legend(fig[last_figure[1] + 1, 1:ncol], legend_entries, unique(categories), nbanks=1)
+    end
     resize_to_layout!(fig)
 
     display(fig)
 
     return fig
+end
+
+
+function bioregion_grouped_lagged_timeseries(
+    dataframe, bellwether_reefs_col, length_t, grouping, lag, ncol;
+    xlabel="Years",
+    ylabel="Value",
+    title=""
+)
+    dataframe = sort(dataframe, [bellwether_reefs_col, :management_area]; rev=true)
+    categories = categorical(dataframe[:, bellwether_reefs_col])
+
+    gdf = DataFrames.groupby(dataframe, grouping)
+
+    if length(gdf) < 27
+        labels = string.(collect('a':'z'))[1:length(gdf)]
+    else
+        error("number of bioregions > 26 (number of letters for labelling)")
+    end
+
+    fig = Figure(backgroundcolor = RGBf(0.98, 0.98, 0.98), size = (2130, 1500))
+
+    colors = [Makie.wong_colors(); Makie.wong_colors()];
+    legend_entries = [
+        [PolyElement(;color = colors[1]), LineElement(;color=:blue)],
+        [PolyElement(;color = colors[2]), LineElement(;color=:red)]
+    ]
+
+    min_var, max_var = extrema(
+        Matrix(DataFrames.select(dataframe, DataFrames.Between(
+            Symbol(length_t[1]), Symbol(length_t[2]))
+        ))
+    )
+    var_difference = max_var - min_var
+    if bellwether_reefs_col == :target_reefs_bior_evenness_cat
+        limits = (nothing, (min_var, max_var))
+        yticks = round.(min_var:(var_difference / 3):max_var; digits=2)
+    else
+        limits = (nothing, (floor(Int64, min_var - 2), ceil(Int64, max_var + 2)))
+        yticks = round.(Int64, min_var:(var_difference / 3):max_var)
+    end
+
+
+    if ncol < 5
+        xsize, ysize = 180, 110
+        label_size = 12
+    else
+        xsize, ysize = 150, 140
+        label_size = 12
+    end
+
+    management_areas = Dict(
+        "Far Northern Management Area" => (:red, 0.7),
+        "Cairns/Cooktown Management Area" => (:green, 0.7),
+        "Townsville/Whitsunday Management Area" => (:blue, 0.7),
+        "Mackay/Capricorn Management Area" => (:Orange, 0.7)
+    )
+
+    management_areas_combinations = Dict(
+        ["Far Northern Management Area", "Cairns/Cooktown Management Area"] => (:teal, 0.7),
+        ["Cairns/Cooktown Management Area", "Townsville/Whitsunday Management Area"] => (:)
+    )
+
+    for (xi, groupdf) in enumerate(gdf)
+        categories = categorical(groupdf[:, bellwether_reefs_col])
+
+        target_reefs = Matrix(
+        DataFrames.select(
+            groupdf[groupdf[:, bellwether_reefs_col] .== "bellwether", :],
+            DataFrames.Between(Symbol(length_t[1]), Symbol(length_t[2]))
+            )
+        )'
+        if lag > 0
+            target_reefs_buffer = fill(missing, lag, size(target_reefs, 2))
+            target_reefs = vcat(target_reefs_buffer, target_reefs)
+        end
+        target_reefs_median = skipmissing_median(target_reefs)
+
+        non_target_reefs = Matrix(
+            DataFrames.select(
+                groupdf[groupdf[:, bellwether_reefs_col] .== "non-bellwether", :],
+                DataFrames.Between(Symbol(length_t[1]), Symbol(length_t[2]))
+            )
+        )'
+        non_target_reefs_median = median(non_target_reefs, dims=2)
+
+        if xi == 1
+            ax = Axis(
+                fig[fldmod1(xi, ncol)...];
+                xlabel = xlabel,
+                xlabelsize = label_size+1,
+                ylabelsize = label_size+1,
+                ylabel = ylabel,
+                xticklabelsize=label_size,
+                limits= limits,
+                yticks = yticks,
+                yticklabelsize=label_size,
+                title=title,
+                width=xsize,
+                height=ysize
+            )
+        else
+            ax = Axis(
+                fig[fldmod1(xi, ncol)...];
+                xticklabelsize=label_size,
+                limits= limits,
+                yticks = yticks,
+                yticklabelsize=label_size,
+                title=title,
+                width=xsize,
+                height=ysize
+            )
+        end
+
+        lines = series!(ax, target_reefs', solid_color=(colors[2], 0.3))
+        series!(non_target_reefs', solid_color=(colors[1], 0.15))
+        series!(target_reefs_median', solid_color=:red)
+        series!(non_target_reefs_median', solid_color=:blue)
+
+        bioregion_label_color = management_areas[first(unique(groupdf.management_area))]
+        Label(
+            fig[fldmod1(xi, ncol)..., TopLeft()],
+            labels[xi],
+            color = bioregion_label_color,
+            fontsize = 15,
+            font = :bold,
+            padding = (0, 5, 5, 0),
+            halign = :right
+        )
+    end
+
+    last_figure = fldmod1(length(gdf), ncol)
+    if last_figure[2] < ncol
+        Legend(fig[last_figure[1], last_figure[2]+1:ncol], legend_entries, unique(categories), nbanks=1)
+    else
+        Legend(fig[last_figure[1] + 1, 1:ncol], legend_entries, unique(categories), nbanks=1)
+    end
+    resize_to_layout!(fig)
+
+    display(fig)
+
+    return fig, gdf.keymap
+end
+
+function plot_map_bellwether_reefs(gdf::Union{DataFrame,DataFrameRow}, color_by::Symbol, bellwether_reefs_col::Symbol; geom_col::Symbol=:geometry)
+    if first(unique(gdf.management_area_short)) ∈ ["FarNorthern", "Cairns-Cooktown"]
+        f = Figure(; size=(700, 1000))
+    else
+        f = Figure(; size=(1000, 800))
+    end
+    ga = GeoAxis(
+        f[1, 1];
+        dest="+proj=latlong +datum=WGS84",
+        xlabel="Longitude",
+        ylabel="Latitude",
+        xticklabelpad=15,
+        yticklabelpad=40,
+        xticklabelsize=10,
+        yticklabelsize=10,
+    )
+
+    plottable = _convert_plottable(gdf, geom_col)
+
+    # Define the unique colors and names for each level of factor color_by.
+    # Use a different color palette for factors with high numbers of levels
+    # (this palette is not as good for visualisation).
+    if size(unique(gdf[:, color_by]),1) <= 20
+        palette = ColorSchemes.tableau_20.colors
+        alph_palette = colorscheme_alpha(ColorSchemes.tableau_20, 0.6)
+    else
+        palette = ColorSchemes.flag_ec.colors
+        alph_palette = colorscheme_alpha(ColorSchemes.flag_ec, 0.6)
+    end
+
+    color_indices = groupindices(DataFrames.groupby(gdf, color_by))
+    names = unique(DataFrame(indices=color_indices, names=gdf[:, color_by]))
+
+    # Create the unique legend entries for each level of color_by
+    unique_names = names.names
+    legend_entries = []
+    for name in eachrow(names)
+        col = palette[name.indices]
+        LE = PolyElement(; color=col)
+        push!(legend_entries, [LE])
+    end
+    bellwether_indices = gdf[:, bellwether_reefs_col] .== "bellwether"
+    non_bellwether_indices = gdf[:, bellwether_reefs_col] .== "non-bellwether"
+
+    non_bell_polys = poly!(ga, plottable[non_bellwether_indices], color=alph_palette[color_indices[non_bellwether_indices]])
+    bell_polys = poly!(ga, plottable[bellwether_indices], color=palette[color_indices[bellwether_indices]], strokewidth=0.5)
+
+    Legend(f[2, 1], legend_entries, unique_names, nbanks=3, tellheight=true,
+    tellwidth=false, orientation=:horizontal, labelsize=9, patchsize=(11,11))
+    resize_to_layout!(f)
+
+    display(f)
+    return f, ga
 end

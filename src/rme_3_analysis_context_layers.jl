@@ -100,9 +100,9 @@ for reef in eachindex(reefs)
 end
 context_layers = leftjoin(context_layers, source_to_sink; on=:RME_GBRMPA_ID, order=:left)
 
-rs = open_dataset("../outputs/RME_result_stores/RME_SSP245_200reps/median_GCM_cover_and_evenness_2024_11_11.nc"; driver=:netcdf)
+rs = open_dataset("../outputs/RME_result_stores/RME_SSP245_300reps/cover_and_evenness_2024_11_14.nc"; driver=:netcdf)
 # 2. Attach initial coral cover data to context_layers
-initial_cc = rs.total_relative_cover[1, :]
+initial_cc = rs.total_relative_cover_median[1, :]
 context_layers.initial_coral_cover = initial_cc.data
 
 initial_evenness = rs.scaled_taxa_evenness[1, :]
@@ -113,16 +113,21 @@ context_layers.initial_evenness = initial_evenness
 dhw_time_scens = load_DHW("../../RME/rme_ml_2024_06_13/data_files/", "SSP245")
 dhw_time = Float64.(mapslices(median, dhw_time_scens, dims=[:scenarios]))
 dhw_locs = Float64.(mapslices(mean, dhw_time[1:50, :], dims=[:timesteps])) # Select only the years in relevant time
-dhw_locs = DataFrame(mean_dhw = vec(dhw_locs.data), RME_GBRMPA_ID = collect(getAxis("locs", dhw_locs).val))
-dhw_locs = dhw_locs[indexin(context_layers.RME_GBRMPA_ID, dhw_locs.RME_GBRMPA_ID), :] # Ensure same order between context_layers and dhw_locs
 
-if all(dhw_locs.RME_GBRMPA_ID .== context_layers.RME_GBRMPA_ID)
-    context_layers.mean_dhw = dhw_locs.mean_dhw
+year_when_8DHW = []
+for loc in 1:size(dhw_time, 2)
+    year = findfirst(x -> x > 7, dhw_time[:, loc])
+    push!(year_when_8DHW, dhw_time.timesteps[year])
+end
+
+if all(dhw_locs.locs .== context_layers.RME_GBRMPA_ID)
+    context_layers.mean_dhw = dhw_locs
+    context_layers.year_8DHW = year_when_8DHW
 else
     @warn "Warning, mean DHW data not joined to context layers due to incorrect ordering"
 end
 
-rel_cover = rs.total_relative_cover
+rel_cover = rs.total_relative_cover_median
 evenness_data = rs.scaled_taxa_evenness
 
 context_layers.dhw_cover_cor .= 0.0
@@ -170,6 +175,12 @@ context_layers = weight_by_context(context_layers, :conn_score_mgmt, :management
 context_layers = weight_by_context(context_layers, :conn_score_subr, :closest_port, :conn_ranked_subr)
 context_layers = weight_by_context(context_layers, :conn_score_bior, :bioregion, :conn_ranked_bior)
 
+if all(context_layers.RME_UNIQUE_ID .== rs.cots_mortality.sites)
+    context_layers.mean_cots_mortality = Float64.(mapslices(mean, rs.cots_mortality; dims=[:timesteps]))
+    context_layers.mean_cyc_mortality = Float64.(mapslices(mean, rs.cyc_mortality; dims=[:timesteps]))
+    context_layers.mean_dhw_mortality = Float64.(mapslices(mean, rs.dhw_mortality; dims=[:timesteps]))
+end
+
 # Format columns for writing to geopackage
 context_layers.income_strength = Float64.(context_layers.income_strength)
 context_layers.income_count .= convert.(Int64, context_layers.income_count)
@@ -188,5 +199,6 @@ context_layers.conn_score .= convert.(Float64, context_layers.conn_score)
 context_layers.conn_score_mgmt .= convert.(Float64, context_layers.conn_score_mgmt)
 context_layers.conn_score_subr .= convert.(Float64, context_layers.conn_score_subr)
 context_layers.conn_score_bior .= convert.(Float64, context_layers.conn_score_bior)
+context_layers.year_8DHW = Float64.(context_layers.year_8DHW)
 
 GDF.write("../data/analysis_context_layers_rme.gpkg", context_layers; crs=GFT.EPSG(7844), overwrite=true)

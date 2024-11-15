@@ -26,12 +26,12 @@ rename!(context_layers, :area_ID => :bioregion)
 context_layers.bioregion .= ifelse.(ismissing.(context_layers.bioregion), "NA", context_layers.bioregion)
 context_layers.bioregion = convert.(String, context_layers.bioregion)
 
-rs = open_dataset("../outputs/RME_result_stores/RME_SSP245_200reps/median_GCM_cover_and_evenness_2024_11_11.nc")
+rs = open_dataset("../outputs/RME_result_stores/RME_SSP245_300reps/cover_and_evenness_2024_11_14.nc")
 
 # Align the order of context_layers with the order of sites in RME
 context_layers = context_layers[indexin(rs.scaled_taxa_evenness.sites, context_layers.RME_UNIQUE_ID), :]
 
-cover_ts = rs.total_relative_cover
+cover_ts = rs.total_relative_cover_median
 cover_ts = cover_ts[1:50, :]
 taxa_evenness = rs.scaled_taxa_evenness
 taxa_evenness = taxa_evenness[1:50, :]

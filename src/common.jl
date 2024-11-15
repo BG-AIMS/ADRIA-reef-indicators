@@ -13,7 +13,7 @@ using
 using
     ColorSchemes,
     GeoMakie,
-    GLMakie,
+    # GLMakie,
     GraphMakie
 
 using
@@ -614,6 +614,7 @@ end
 
 function prepare_ReefMod_results(
     results::YAXArrays.Dataset,
+    result_store_dir,
     location_ids,
     start_year,
     end_year,
@@ -627,6 +628,9 @@ function prepare_ReefMod_results(
 
     cover_median = Float64.(mapslices(median, total_cover, dims=[:scenarios]))
     taxa_median = Float64.(mapslices(median, taxa_cover, dims=[:scenarios]))
+    cyc_median = Float64.(mapslices(median, results.cyc_mortality; dims=[:scenarios]))
+    cots_median = Float64.(mapslices(median, results.cots_mortality; dims=[:scenarios]))
+    dhw_median = Float64.(mapslices(median, results.dhw_mortality; dims=[:scenarios]))
     taxa_evenness = _coral_evenness(taxa_median; method=evenness_method, evenness_weight=evenness_weight, cover_weight=cover_weight)
 
     axlist = (
@@ -635,9 +639,15 @@ function prepare_ReefMod_results(
     )
     cover_median = rebuild(cover_median, dims=axlist)
     taxa_evenness = rebuild(taxa_evenness, dims=axlist)
+    cyc_mortality = rebuild(cyc_median, dims=axlist)
+    cots_mortality = rebuild(cots_median, dims=axlist)
+    dhw_mortality = rebuild(dhw_median, dims=axlist)
     arrays = Dict(
         :total_relative_cover_median => cover_median,
-        :scaled_taxa_evenness => taxa_evenness
+        :scaled_taxa_evenness => taxa_evenness,
+        :dhw_mortality => dhw_mortality,
+        :cots_mortality => cots_mortality,
+        :cyc_mortality => cyc_mortality
     )
     ds = Dataset(; arrays...)
     savedataset(ds, path="$(result_store_dir)/$(fn)", driver=:netcdf, overwrite=true)
@@ -752,11 +762,11 @@ end
 
 """
     rebuild_RME_dataset(
-        rs_dataset, 
-        start_year, 
-        end_year, 
-        location_ids, 
-        n_reps, 
+        rs_dataset,
+        start_year,
+        end_year,
+        location_ids,
+        n_reps,
         unique_indices
     )
 
@@ -766,16 +776,16 @@ Rebuild a RME dataset that has duplicated scenarios. For example, when RME outpu
 - `rs_dataset` : The RME dataset with duplicated scenarios.
 - `start_year` : Start year of timesteps dimension.
 - `end_year` : End year of timesteps dimension.
-- `location_ids` : Location IDs to be held in sites dimension. 
+- `location_ids` : Location IDs to be held in sites dimension.
 - `n_reps` : The intended number of scenarios that should be in the returned dataset (after removing duplicate scenarios).
 - `unique_indices` : The first index of each unique scenario to keep (excludes indices of duplicate scenarios).
 """
 function rebuild_RME_dataset(
-    rs_dataset, 
-    start_year, 
-    end_year, 
-    location_ids, 
-    n_reps, 
+    rs_dataset,
+    start_year,
+    end_year,
+    location_ids,
+    n_reps,
     unique_indices
 )
     variable_keys = keys(rs_dataset.cubes)
@@ -810,13 +820,13 @@ end
 """
     concat_RME_netcdfs(dataset_1, dataset_s...)
 
-Combine RME result netcdf datasets along the `scenarios` dimension to 
+Combine RME result netcdf datasets along the `scenarios` dimension to
 combine scenarios that have been run separately into a single dataset.
 
 # Example
 results_dataset_300scens = concat_RME_netcdfs(
-    results_dataset_200scens, 
-    results_dataset_50scens, 
+    results_dataset_200scens,
+    results_dataset_50scens,
     results_dataset_50scens
 )
 """
@@ -824,7 +834,7 @@ function concat_RME_netcdfs(dataset_1, dataset_s...)
     variable_keys = keys(dataset_1.cubes)
     Xin = [dataset_1, dataset_s...]
     arrays = Dict()
-    
+
     for variable in variable_keys
         if variable == :total_taxa_cover
             yarrays = [x[variable] for x in Xin]
@@ -850,7 +860,7 @@ function concat_RME_netcdfs(dataset_1, dataset_s...)
             )
             yarray = rebuild(yarray, dims=axlist)
         end
-        
+
         push!(arrays, variable => yarray)
     end
 
