@@ -866,3 +866,29 @@ function concat_RME_netcdfs(dataset_1, dataset_s...)
 
     return Dataset(; arrays...)
 end
+
+"""
+    load_result_store(dir_name::String, n_reps::Int64)::ResultStore
+
+Save ResultStore from saved results.nc and scenarios.csv files to allow modification.
+"""
+function load_result_store(dir_name::String, n_reps::Int64)::ResultStore
+    result_path = joinpath(dir_name, "results.nc")
+    results = open_dataset(result_path, driver=:netcdf)
+    start_year = first(results.timesteps)
+    end_year = last(results.timesteps)
+    n_reefs = length(results.locations)
+
+    scenario_path = joinpath(dir_name, "scenarios.csv")
+    scenario = CSV.read(scenario_path, DataFrame)
+
+    return ResultStore(
+        results,
+        scenario,
+        start_year,
+        end_year,
+        (end_year - start_year) + 1,
+        n_reefs,
+        n_reps
+    )
+end

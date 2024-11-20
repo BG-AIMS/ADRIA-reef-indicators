@@ -899,11 +899,6 @@ function bioregion_grouped_lagged_timeseries(
         "Mackay/Capricorn Management Area" => (:Orange, 0.7)
     )
 
-    management_areas_combinations = Dict(
-        ["Far Northern Management Area", "Cairns/Cooktown Management Area"] => (:teal, 0.7),
-        ["Cairns/Cooktown Management Area", "Townsville/Whitsunday Management Area"] => (:)
-    )
-
     for (xi, groupdf) in enumerate(gdf)
         categories = categorical(groupdf[:, bellwether_reefs_col])
 

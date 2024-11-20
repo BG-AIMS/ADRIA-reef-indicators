@@ -104,7 +104,7 @@ filtered_bior = filtered_bior[filtered_bior.bioregion .∈ [unique(filtered_bior
 
 # Basic exploratory models of factors
 #glm_allreefs = glm(@formula(target_reefs_bior ~ out_comb + dhw_cor ), no_crash_gbr, Binomial())
-glm_bioregions = glm(@formula(target_reefs_bior ~ mean_dhw + so_to_si + conn_score + total_strength + initial_coral_cover + dhw_cover_cor + mean_cots_mortality), filtered_bior, Binomial())
+glm_bioregions = glm(@formula(target_reefs_bior ~ mean_dhw + year_8DHW + so_to_si + conn_score + total_strength + initial_coral_cover + dhw_cover_cor + mean_cots_mortality), filtered_bior, Binomial())
 #glm_subregions = glm(@formula(target_reefs_subr ~ total_comb + so_to_si + initial_coral_cover + bioregion_count), filtered_subr, Binomial())
 
 # aic(glm_allreefs), aic(glm_bioregions), aic(glm_subregions)
@@ -116,7 +116,6 @@ glmm_form = @formula(
     conn_score +
     total_strength +
     initial_coral_cover +
-    initial_evenness +
     dhw_cover_cor +
     mean_cots_mortality +
     (1|bioregion)
@@ -133,6 +132,13 @@ mean_dhw_raincloud = bioregion_grouped_boxplots(
     ylabel="mean DHW"
 );
 save("../figs/mean_dhw_raincloud_cover.png", mean_dhw_raincloud)
+
+year_8DHW_raincloud = bioregion_grouped_boxplots(
+    filtered_bior,
+    :target_reefs_bior_cat,
+    :bioregion, :year_8DHW, 4,
+    ylabel="Year when 8 DHW are reached"
+);
 
 so_to_si_raincloud = bioregion_grouped_boxplots(
     filtered_bior,
