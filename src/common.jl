@@ -2,6 +2,7 @@ using Glob
 using Dates
 using CategoricalArrays
 using NetCDF
+using StatsBase
 
 using
     CSV,
