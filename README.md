@@ -1,8 +1,10 @@
 # ADRIA-reef-indicators
-Time series analyses for GBR health using ADRIA and CoralBlox model.
+Time series analyses for GBR health using ReefModEngine ecosystem model.
 - Looking for reefs that decline early compared to their surrounding reefs. These could be considered as bellwether reefs that indicate oncoming decline.
 - Looking for reefs that have a delay in decline compared to their surrounding reefs. These could be considered as more resilient to the surrounding stressors.
 
+Previously this study used ADRIA and CoralBlox for ecological modelling. This has moved to focus on
+ReefModEngine instead, scripts used for ADRIA modelling have been archived to `src/ADRIA` folder.
 ## Structure
 ``` code
 ADRIA-reef-indicators/
@@ -15,31 +17,28 @@ ADRIA-reef-indicators/
 ├─ Project.toml   # Julia project spec
 └─ README.md      # this file
 ```
-### Analysis scrips - `src`
-- `1_initial_results.jl` : Loads RME domain and produces initial result set
 
-- `2_initial_analysis_and_metrics.jl` : Produces coral cover metrics from `rs` result set
-
-- `3_Subregion_correlation.jl` : Lagged correlation analysis at subregion scale
-
-- `4_Bioregion_correlation.jl` : Lagged correlation analysis at bioregion scale
-
-- `5_exploratory_analysis.jl` : Exploratory analysis of common reefs identified at subregion and bioregion scale.
+### Analysis scrips - `src/RME`
+- `RME_initial_runs_remote_desktop.jl` : Script for running RME scenarios on the remote desktop (takes 3 days to run 1200 scenarios).
+- `RME_processing_run_results.jl` : Script for taking the RME results for each GCM and combining them into a single ensemble dataset, then calculating median cover and taxa evenness.
+- `rme_2_Subregion_correlation.jl` : Lagged correlation analysis at for bioregions.
+- `rme_3_analysis_context_layers.jl` : Addition of context layers to the correlation results for statistical analysis.
+- `rme_4_exploratory_analysis.jl` : Exploratory analysis of bellwether reefs.
 
 ## Methods
 ### Domain
-Using GBR-wide domain from ReefModEngine data: "rme_ml_2024_01_08".
+Using GBR-wide domain from ReefModEngine data: "rme_ml_2024_06_13".
 
 Currently using RCP 45 from domain.
 
 #### Includes:
 - Initial coral cover data from RME
 - DHW/environmental data from RME
-- Reef spatial data from RME (Canonical-Reefs geopackage)
-- Connectivity data from (`connectivity team source`)
+- Reef spatial data from RME
+- Connectivity data from RME
 
 ### Scales
-Timeseries are grouped by reefs into their subregion (currently based on the closest port to each reef), and their bioregion (GBRMPA reefal bioregion data).
+Timeseries are grouped by reefs into their bioregion (GBRMPA reefal bioregion data).
 The timeseries are then compared for each reef within these groups with the overall group median timeseries.
 
 ### Lagged Correlation Analyses
@@ -53,8 +52,8 @@ Reefs with timeseries that occur early/late at both subregion/bioregion scales a
 These candidate reefs are then explored for their common characteristics that differ from other surrounding reefs, such as:
 
 - strength/number of outgoing and incoming larval connections
+- connectivity centrality (eigenvector)
 - initial coral cover values
-- reef size
-- reef depth
-- proportion of functional groups occupying reefs (e.g. functional group that is dominant)
-- environmental stressors compared to surrounding reefs (e.g. consistently higher DHW compared to surrounding reefs)
+- mean DHW thermal stress experienced
+- correlation of cover/evenness timeseries with DHW timeseries (susceptibility)
+- Crown of Thorns Starfish Mortality

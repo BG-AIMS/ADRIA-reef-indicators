@@ -1,3 +1,8 @@
+"""
+Script to run desired scenario sets on the AIMS remote desktop setup. Remote desktop is not
+required after this script has run.
+"""
+
 using ReefModEngine
 using YAXArrays, NetCDF
 

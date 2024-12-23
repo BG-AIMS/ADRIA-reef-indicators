@@ -26,59 +26,77 @@ rename!(context_layers, :area_ID => :bioregion)
 context_layers.bioregion .= ifelse.(ismissing.(context_layers.bioregion), "NA", context_layers.bioregion)
 context_layers.bioregion = convert.(String, context_layers.bioregion)
 
-rs = open_dataset("../outputs/RME_result_stores/RME_SSP245_300reps/cover_and_evenness_2024_11_14.nc")
+for GCM in gcms
+    rs = open_dataset("../outputs/RME_result_stores/RME_SSP245_300reps/RME_SSP245_300reps_$(GCM)/cover_and_evenness_2024_12_18.nc"; driver=:netcdf)
 
-# Align the order of context_layers with the order of sites in RME
-context_layers = context_layers[indexin(rs.scaled_taxa_evenness.sites, context_layers.RME_UNIQUE_ID), :]
 
-cover_ts = rs.total_relative_cover_median
-cover_ts = cover_ts[1:50, :]
-taxa_evenness = rs.scaled_taxa_evenness
-taxa_evenness = taxa_evenness[1:50, :]
+    # Align the order of context_layers with the order of sites in RME
+    context_layers = context_layers[indexin(rs.scaled_taxa_evenness.sites, context_layers.RME_UNIQUE_ID), :]
 
-# Apply analysis to management regions - 4 regions
-# management_regions = unique(context_layers.management_area)
-# lagged_analysis_mgmt = subregion_analysis(management_regions, cover_ts, context_layers, :management_area, 1:10)
-# target_reefs_mgmt = lagged_analysis_mgmt[(lagged_analysis_mgmt[:,"lag4"] .>= 0.7), :RME_UNIQUE_ID]
+    cover_ts = rs.total_relative_cover_median
+    cover_ts = cover_ts[1:50, :]
+    taxa_evenness = rs.scaled_taxa_evenness
+    taxa_evenness = taxa_evenness[1:50, :]
 
-# lagged_analysis_mgmt_evenness = subregion_analysis(management_regions, taxa_evenness, context_layers, :management_area, 1:10)
-# target_reefs_mgmt_evenness = lagged_analysis_mgmt_evenness[(lagged_analysis_mgmt_evenness[:,"lag5"] .>= 0.7), :RME_UNIQUE_ID]
+    context_layers[:, "$(GCM)_lag0_bior"] .= 0.0
+    context_layers[:, "$(GCM)_lag3_bior"] .= 0.0
+    context_layers[:, "$(GCM)_lag4_bior"] .= 0.0
+    context_layers[:, "$(GCM)_lag5_bior"] .= 0.0
 
-# # Apply analysis to closest_port subregions - 15 subregions
-# port_subregions = unique(context_layers.closest_port)
-# lagged_analysis_subregion = subregion_analysis(port_subregions, cover_ts, context_layers, :closest_port, 1:10)
-# target_reefs_subr = lagged_analysis_subregion[(lagged_analysis_subregion[:,"lag4"] .>= 0.7), :RME_UNIQUE_ID]
+    # Apply analysis to bioregion subregions - 31 subregions
+    context_layers[:, "$(GCM)_lag0_bior"] = cluster_correlation(context_layers.bioregion, cover_ts, 0, CF)
+    context_layers[:, "$(GCM)_lag3_bior"] = cluster_correlation(context_layers.bioregion, cover_ts, 3, CF)
+    context_layers[:, "$(GCM)_lag4_bior"] = cluster_correlation(context_layers.bioregion, cover_ts, 4, CF)
+    context_layers[:, "$(GCM)_lag5_bior"] = cluster_correlation(context_layers.bioregion, cover_ts, 5, CF)
+    # lagged_analysis_bior = subregion_analysis(bioregions, cover_ts, context_layers, :bioregion, 1:10)
+    # context_layers = leftjoin(context_layers, lagged_analysis_bior[:, ["lag4", "RME_UNIQUE_ID"]], on=:RME_UNIQUE_ID, order=:left)
+    # rename!(context_layers, "lag4" => "$(GCM)_lag4_bior")
+    context_layers[:, "$(GCM)_bior_cover_qc_flag"] = ifelse.(isnan.(context_layers[:, "$(GCM)_lag4_bior"]), 1, 0)
+    context_layers[:, "$(GCM)_lag4_bior"] = Float64.(
+        ifelse.(
+            isnan.(context_layers[:, "$(GCM)_lag4_bior"]),
+            0.0,
+            context_layers[:, "$(GCM)_lag4_bior"]
+        )
+    )
 
-# lagged_analysis_subregion_evenness = subregion_analysis(port_subregions, taxa_evenness, context_layers, :closest_port, 1:10)
-# target_reefs_subr_evenness = lagged_analysis_subregion_evenness[(lagged_analysis_subregion_evenness[:,"lag5"] .>= 0.7), :RME_UNIQUE_ID]
+    context_layers[:, "$(GCM)_lag0_bior_evenness"] .= 0.0
+    context_layers[:, "$(GCM)_lag3_bior_evenness"] .= 0.0
+    context_layers[:, "$(GCM)_lag4_bior_evenness"] .= 0.0
+    context_layers[:, "$(GCM)_lag5_bior_evenness"] .= 0.0
 
-# Apply analysis to bioregion subregions - 31 subregions
-bioregions = unique(context_layers.bioregion)
+    # Apply analysis to bioregion subregions - 31 subregions
+    context_layers[:, "$(GCM)_lag0_bior_evenness"]= cluster_correlation(context_layers.bioregion, taxa_evenness, 0, CF)
+    context_layers[:, "$(GCM)_lag3_bior_evenness"]= cluster_correlation(context_layers.bioregion, taxa_evenness, 3, CF)
+    context_layers[:, "$(GCM)_lag4_bior_evenness"]= cluster_correlation(context_layers.bioregion, taxa_evenness, 4, CF)
+    context_layers[:, "$(GCM)_lag5_bior_evenness"] = cluster_correlation(context_layers.bioregion, taxa_evenness, 5, CF)
 
-lagged_analysis_bior = subregion_analysis(bioregions, cover_ts, context_layers, :bioregion, 1:10)
-context_layers = leftjoin(context_layers, lagged_analysis_bior[:, ["lag4", "RME_UNIQUE_ID"]], on=:RME_UNIQUE_ID, order=:left)
-rename!(context_layers, :lag4 => :lag4_bior)
-context_layers.bior_cover_qc_flag = ifelse.(isnan.(context_layers.lag4_bior), 1, 0)
-context_layers.lag4_bior = ifelse.(isnan.(context_layers.lag4_bior), 0.0, context_layers.lag4_bior)
+    #gged_analysis_bior_evenness = subregion_analysis(bioregions, taxa_evenness, context_layers, :bioregion, 1:10)
+    # context_layers = leftjoin(context_layers, lagged_analysis_bior_evenness[:, ["lag4", "RME_UNIQUE_ID"]], on=:RME_UNIQUE_ID, order=:left)
+    # rename!(context_layers, "lag4" => "$(GCM)_lag4_bior_evenness")
+    context_layers[:, "$(GCM)_bior_evenness_qc_flag"] = ifelse.(isnan.(context_layers[:, "$(GCM)_lag4_bior_evenness"]), 1, 0)
+    context_layers[:, "$(GCM)_lag4_bior_evenness"] = Float64.(
+        ifelse.(
+            isnan.(context_layers[:, "$(GCM)_lag4_bior_evenness"]),
+            0.0,
+            context_layers[:, "$(GCM)_lag4_bior_evenness"]
+        )
+    )
 
-lagged_analysis_bior_evenness = subregion_analysis(bioregions, taxa_evenness, context_layers, :bioregion, 1:10)
-context_layers = leftjoin(context_layers, lagged_analysis_bior_evenness[:, ["lag4", "RME_UNIQUE_ID"]], on=:RME_UNIQUE_ID, order=:left)
-rename!(context_layers, :lag4 => :lag4_bior_evenness)
-context_layers.bior_evenness_qc_flag = ifelse.(isnan.(context_layers.lag4_bior_evenness), 1, 0)
-context_layers.lag4_bior_evenness = ifelse.(isnan.(context_layers.lag4_bior_evenness), 0.0, context_layers.lag4_bior_evenness)
+    context_layers[:, "$(GCM)_target_reefs_bior"] = (
+        #(context_layers[:, "$(GCM)_lag4_bior"] .<= quantile(context_layers[:, "$(GCM)_lag4_bior"], 0.20)) .&
+        ((context_layers[:, "$(GCM)_lag4_bior"] .- context_layers[:, "$(GCM)_lag0_bior"]) .< -0.2)
+    )
+    context_layers[:, "$(GCM)_target_reefs_bior_cat"] = ifelse.(context_layers[:, "$(GCM)_target_reefs_bior"], "bellwether", "non-bellwether")
 
-# Find common reefs betwen two subregion analyses
-# target_reefs = target_reefs_bior[(target_reefs_bior .∈ [target_reefs_subr])]
-# target_reefs_evenness = target_reefs_bior_evenness[(target_reefs_bior_evenness .∈ [target_reefs_subr_evenness])]
+    context_layers[:, "$(GCM)_target_reefs_bior_evenness"] = (
+        (context_layers[:, "$(GCM)_lag4_bior_evenness"] .<= quantile(context_layers[:, "$(GCM)_lag4_bior_evenness"], 0.20)) .&
+        ((context_layers[:, "$(GCM)_lag4_bior_evenness"] .- context_layers[:, "$(GCM)_lag0_bior_evenness"]) .> 0)
+    )
+    context_layers[:, "$(GCM)_target_reefs_bior_evenness_cat"] = ifelse.(context_layers[:, "$(GCM)_target_reefs_bior_evenness"], "bellwether", "non-bellwether")
 
-# Add identified reefs to context_layers and write to gpkg with bioregion names
-# context_layers.target_reefs_mgmt = context_layers.RME_UNIQUE_ID .∈ [target_reefs_mgmt]
-# context_layers.target_reefs_subr = context_layers.RME_UNIQUE_ID .∈ [target_reefs_subr]
-context_layers.target_reefs_bior = context_layers.lag4_bior .> 0.7
-# context_layers.target_reefs = context_layers.RME_UNIQUE_ID .∈ [target_reefs]
+    context_layers[!, "$(GCM)_lag4_bior"] = convert.(Float64, context_layers[:, "$(GCM)_lag4_bior"])
+    context_layers[!, "$(GCM)_lag4_bior_evenness"] = convert.(Float64, context_layers[:, "$(GCM)_lag4_bior_evenness"])
+end
 
-# context_layers.target_reefs_mgmt_evenness = context_layers.RME_UNIQUE_ID .∈ [target_reefs_mgmt_evenness]
-# context_layers.target_reefs_subr_evenness = context_layers.RME_UNIQUE_ID .∈ [target_reefs_subr_evenness]
-context_layers.target_reefs_bior_evenness = context_layers.lag4_bior_evenness .> 0.7
-# context_layers.target_reefs_evenness = context_layers.RME_UNIQUE_ID .∈ [target_reefs_evenness]
-GDF.write("../data/context_layers_targetted_rme.gpkg", context_layers; crs=GFT.EPSG(7844), overwrite=true)
+GDF.write("../data/context_layers_targetted_rme_CF.gpkg", context_layers; crs=GFT.EPSG(7844), overwrite=true)

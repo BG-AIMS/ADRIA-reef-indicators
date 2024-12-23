@@ -89,6 +89,80 @@ function load_DHW(data_path::String, rcp::String, timeframe=(2022, 2099))::YAXAr
 end
 
 """
+    load_DHW(::Type{RMEDomain}, data_path::String, rcp::String, timeframe=(2022, 2100))::YAXArray
+
+Loads ReefMod DHW data as a datacube.
+
+# Arguments
+- `RMEDomain`
+- `data_path` : path to ReefMod data
+- `rcp` : RCP identifier
+- `timeframe` : range of years to represent.
+
+# Returns
+YAXArray[timesteps, locs, scenarios]
+"""
+function load_DHW(data_path::String, rcp::String, GCM::String, timeframe=(2022, 2099))::YAXArray
+    dhw_path = joinpath(data_path, "dhw_csv")
+    rcp_files = _get_relevant_files(dhw_path, rcp)
+    rcp_files = filter(x -> occursin(GCM, x), rcp_files)
+    if GCM != "GFDL-ESM4"
+        rcp_files = filter(x -> occursin("SSP", x), rcp_files)
+    end
+    if isempty(rcp_files)
+        ArgumentError("No DHW data files found in: $(dhw_path)")
+    end
+
+    first_file = CSV.read(rcp_files[1], DataFrame)
+    loc_ids = String.(first_file[:, 1])
+
+    data_tf = parse.(Int64, names(first_file[:, 2:end]))
+    tf_start = findall(timeframe[1] .∈ data_tf)[1]
+    tf_end = findall(timeframe[2] .∈ data_tf)[1]
+
+    d1 = first_file[:, (tf_start+1):(tf_end+1)]
+    data_shape = reverse(size(d1))
+    data_cube = zeros(data_shape..., length(rcp_files))
+    data_cube[:, :, 1] .= Matrix(d1)'
+
+    local tf_start
+    local tf_end
+    keep_ds = fill(true, length(rcp_files))
+    for (i, rcp_data_fn) in enumerate(rcp_files[2:end])
+        d = CSV.read(rcp_data_fn, DataFrame)[:, 2:end]
+
+        if size(d, 1) == 0
+            @info "Empty file?" rcp_data_fn
+            continue
+        end
+
+        data_tf = parse.(Int64, names(d))
+        try
+            tf_start = findall(timeframe[1] .∈ data_tf)[1]
+            tf_end = findall(timeframe[2] .∈ data_tf)[1]
+        catch err
+            if !(err isa BoundsError)
+                rethrow(err)
+            end
+
+            @warn "Building DHW: Could not find matching time frame, skipping $rcp_data_fn"
+            keep_ds[i] = false  # mark scenario for removal
+            continue
+        end
+
+        data_cube[:, :, i+1] .= Matrix(d[:, tf_start:tf_end])'
+    end
+
+    # Only return valid scenarios
+    return DataCube(
+        data_cube[:, :, keep_ds];
+        timesteps=timeframe[1]:timeframe[2],
+        locs=loc_ids,
+        scenarios=rcp_files[keep_ds],
+    )
+end
+
+"""
     DataCube(data::AbstractArray; kwargs...)::YAXArray
 
 Constructor for YAXArray. When used with `axes_names`, the axes labels will be UnitRanges

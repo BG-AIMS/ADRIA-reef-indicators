@@ -2,6 +2,8 @@
 File includes the plotting functions for ADRIA-reef-indicators analysis.
 """
 
+using Printf
+
 function _convert_plottable(gdf::Union{DataFrame,DataFrameRow}, geom_col::Symbol)
     local plottable
     try
@@ -349,89 +351,6 @@ function bellwether_reef_numbers_plot(df, variable_col, value_col, xlabel="lags"
     display(f)
 end
 
-function basic_target_reef_boxplot(
-    categories, values;
-    xlabel="Bellwether Reefs",
-    ylabel="values",
-    xticks=unique(categories),
-    title="",
-    method=nothing
-)
-    fig = Figure()
-    target_reefs_axis = Axis(
-        fig[1,1];
-        xlabel = xlabel,
-        ylabel = ylabel,
-        xticks = (unique(categories.refs), xticks),
-        title=title
-    )
-
-    colors = [Makie.wong_colors(); Makie.wong_colors()];
-    legend_entries = []
-    for (i, col) in enumerate(unique(colors[indexin(categories, unique(categories))]))
-        LE = PolyElement(; color=col)
-        push!(legend_entries, [LE])
-    end
-
-    if method == "rainclouds"
-        f = rainclouds!(target_reefs_axis, categories.refs, values; color=colors[indexin(categories, unique(categories))], markersize=3, jitter_width=0.1, side_nudge=0.27)
-    else
-        f = boxplot!(target_reefs_axis, categories.refs, values; color=colors[indexin(categories, unique(categories))])
-    end
-
-    Legend(fig[1,2], legend_entries, unique(categories))
-
-    display(fig)
-
-    return fig
-end
-
-function basic_target_reef_boxplot(
-    categories, values, yticks;
-    xlabel="Bellwether Reefs",
-    ylabel="values",
-    xticks=["non-bellwether reefs", "bellwether reefs"],
-    title=""
-)
-    fig = Figure()
-    target_reefs_axis = Axis(
-        fig[1,1];
-        xlabel = xlabel,
-        ylabel = ylabel,
-        xticks = ([1.0,length(xticks)],xticks),
-        yticks = yticks,
-        title=title
-    )
-    f = boxplot!(target_reefs_axis, categories, values)
-
-    display(fig)
-
-    return fig
-end
-
-function timeseries_plot(data, target_reefs_col, length, ylabel, alpha)
-    target_reefs = Matrix(
-        DataFrames.select(
-            data[data[:, target_reefs_col] .== "bellwether", :],
-            DataFrames.Between(Symbol(length[1]), Symbol(length[2]))
-        )
-    )'
-    target_reefs = median(target_reefs, dims=2)
-    non_target_reefs = Matrix(
-        DataFrames.select(
-            data[data[:, target_reefs_col] .== "non-bellwether", :],
-            DataFrames.Between(Symbol(length[1]), Symbol(length[2]))
-        )
-    )'
-    non_target_reefs = median(non_target_reefs, dims=2)
-
-    f, ax = plot_lines(data, target_reefs_col, length[1], length[2], "Year", ylabel, alpha)
-    series!(target_reefs', solid_color=:red)
-    series!(non_target_reefs', solid_color=:blue)
-
-    return f
-end
-
 function skipmissing_median(x)
     new_median = Vector{Union{Missing, Float64}}(missing, size(x, 1))
     for (i, row) in enumerate(eachrow(x))
@@ -442,121 +361,6 @@ function skipmissing_median(x)
     end
 
     return new_median
-end
-
-function lagged_timeseries_plot(data, target_reefs_col, length_t, xlab, ylab, alpha, lag)
-    target_reefs = Matrix(
-        DataFrames.select(
-            data[data[:, target_reefs_col] .== "bellwether", :],
-            DataFrames.Between(Symbol(length_t[1]), Symbol(length_t[2]))
-        )
-    )'
-    target_reefs_buffer = fill(missing, lag, size(target_reefs, 2))
-    target_reefs = vcat(target_reefs_buffer, target_reefs)
-
-    target_reefs_median = skipmissing_median(target_reefs)
-
-    non_target_reefs = Matrix(
-        DataFrames.select(
-            data[data[:, target_reefs_col] .== "non-bellwether", :],
-            DataFrames.Between(Symbol(length_t[1]), Symbol(length_t[2]))
-        )
-    )'
-    non_target_reefs_median = median(non_target_reefs, dims=2)
-
-
-    f = Figure()
-    ax = Axis(f[1,1]; xlabel=xlab, ylabel=ylab)
-
-    alph_palette = colorscheme_alpha(ColorSchemes.tableau_20, alpha)[2:3];
-    palette = ColorSchemes.tableau_20.colors[2:3]
-
-    legend_entries = [
-        PolyElement(;color = palette[1]),
-        PolyElement(;color = palette[2])
-    ]
-
-    lines = series!(ax, target_reefs', solid_color=alph_palette[2])
-    series!(non_target_reefs', solid_color=alph_palette[1])
-    series!(target_reefs_median', solid_color=:red)
-    series!(non_target_reefs_median', solid_color=:blue)
-
-    Legend(f[2, 1], legend_entries, ["non-bellwether reefs", "bellwether reefs"], nbanks=3, tellheight=true,
-    tellwidth=false, orientation=:horizontal, labelsize=10)
-
-    return f
-end
-
-function lagged_timeseries_plot_combined(data, target_reefs_col, length_t, xlab, ylab, alpha, lag)
-    f = Figure(backgroundcolor = RGBf(0.98, 0.98, 0.98), size = (1000, 700))
-    ga = Axis(f[1, 1], xlabel=xlab, ylabel=ylab)
-    gb = Axis(f[1, 2], xlabel=xlab, ylabel=ylab)
-
-    alph_palette = colorscheme_alpha(ColorSchemes.tableau_20, alpha)[2:3];
-    palette = ColorSchemes.tableau_20.colors[2:3];
-
-    legend_entries = [
-        [PolyElement(;color = palette[1]), LineElement(;color=:blue)],
-        [PolyElement(;color = palette[2]), LineElement(;color=:red)]
-    ]
-
-    # Prepare plotting matrices for non-lagged plot
-    target_reefs = Matrix(
-        DataFrames.select(
-            data[data[:, target_reefs_col] .== "bellwether", :],
-            DataFrames.Between(Symbol(length_t[1]), Symbol(length_t[2]))
-        )
-    )'
-    target_reefs_median = skipmissing_median(target_reefs)
-
-    non_target_reefs = Matrix(
-        DataFrames.select(
-            data[data[:, target_reefs_col] .== "non-bellwether", :],
-            DataFrames.Between(Symbol(length_t[1]), Symbol(length_t[2]))
-        )
-    )'
-    non_target_reefs_median = median(non_target_reefs, dims=2)
-
-    # Plot non-lagged timeseries lines
-    line_a = series!(ga, target_reefs', solid_color=(palette[2], 0.3))
-    series!(ga, non_target_reefs', solid_color=alph_palette[1])
-    series!(ga, target_reefs_median', solid_color=:red)
-    series!(ga, non_target_reefs_median', solid_color=:blue)
-
-    # Prepare bellwether reefs lagged timeseries data
-    target_reefs = Matrix(
-        DataFrames.select(
-            data[data[:, target_reefs_col] .== "bellwether", :],
-            DataFrames.Between(Symbol(length_t[1]), Symbol(length_t[2]))
-        )
-    )'
-    target_reefs_buffer = fill(missing, lag, size(target_reefs, 2))
-    target_reefs = vcat(target_reefs_buffer, target_reefs)
-    target_reefs_median = skipmissing_median(target_reefs)
-
-    # Plot lagged timeseries lines
-    line_b = series!(gb, target_reefs', solid_color=(palette[2], 0.3))
-    series!(gb, non_target_reefs', solid_color=alph_palette[1])
-    series!(gb, target_reefs_median', solid_color=:red)
-    series!(gb, non_target_reefs_median', solid_color=:blue)
-
-    Legend(f[2, 1:2], legend_entries, ["non-bellwether reefs", "bellwether reefs"], nbanks=3, tellheight=true,
-    tellwidth=false, orientation=:horizontal, labelsize=10, position=(0.8,0.3))
-
-    Label(f[1,1,TopLeft()], "a",
-        fontsize = 26,
-        font = :bold,
-        padding = (0, 5, 5, 0),
-        halign = :right
-    )
-    Label(f[1,2,TopLeft()], "b",
-        fontsize = 26,
-        font = :bold,
-        padding = (0, 5, 5, 0),
-        halign = :right
-    )
-
-    return f
 end
 
 function explore_regression_scatter_plots(x, y; color=:blue, xlab="", ylab="", title="")
@@ -575,136 +379,563 @@ function explore_regression_scatter_plots(x, y; color=:blue, xlab="", ylab="", t
     return fig
 end
 
-function combined_bellwether_reef_boxplot(
-    dataframe, bellwether_reefs_col;
-    xlabel="Bellwether Reefs",
-    xticks=unique(dataframe[:, bellwether_reefs_col]),
-    title="",
-    method=nothing
-)
-    dataframe = sort(dataframe, bellwether_reefs_col)
+function label_lines(label)
+    if length(label) > 25
+        label_new = replace(label, r"(.{25} )" => s"\1\n")
+
+        return label_new
+    end
+
+    return label
+end
+
+function _axis_size(gdf, x_fig_size, y_fig_size, n_col)
+    xsize = x_fig_size / (n_col*2)
+    n_fig_row = first(fldmod1(length(gdf), n_col))
+    ysize = y_fig_size / (n_fig_row*1.5)
+
+    return xsize, ysize
+end
+
+function _extract_name_and_correlation(df,bellwether_reefs_col, correlation_col)
+    bioregion = first(df.bioregion)
+    cor = round(mean(df[df[:, bellwether_reefs_col] .== "bellwether", correlation_col]), sigdigits=2)
+
+    return "$(bioregion) ($(@sprintf("%.2f",cor)))"
+end
+
+function _setup_grouped_figure(dataframe, bellwether_reefs_col, grouping; x_fig_size=2130, y_fig_size=1500)
+    dataframe = sort(dataframe, [bellwether_reefs_col, :management_area]; rev=true)
     categories = categorical(dataframe[:, bellwether_reefs_col])
 
-    fig = Figure(backgroundcolor = RGBf(0.98, 0.98, 0.98), size = (1000, 700))
-    ga = Axis(
-        fig[1,1];
-        xlabel = xlabel,
-        ylabel = "mean DHW",
-        xticks = (unique(categories.refs), xticks),
-        title=title,
-        width=350,
-        height=200
-    )
-    gb = Axis(
-        fig[1,2];
-        xlabel = xlabel,
-        ylabel = "Source to sink ratio",
-        xticks = (unique(categories.refs), xticks),
-        title=title,
-        width=350,
-        height=200
-    )
-    gc = Axis(
-        fig[1,3];
-        xlabel = xlabel,
-        ylabel = "Connectivity eigenvector centrality",
-        xticks = (unique(categories.refs), xticks),
-        title=title,
-        width=350,
-        height=200
-    )
-    gd = Axis(
-        fig[2,1];
-        xlabel = xlabel,
-        ylabel = "Total connectivity strength",
-        xticks = (unique(categories.refs), xticks),
-        title=title,
-        width=350,
-        height=200
-    )
-    ge = Axis(
-        fig[2,2];
-        xlabel = xlabel,
-        ylabel = "Initial coral cover",
-        xticks = (unique(categories.refs), xticks),
-        title=title,
-        width=350,
-        height=200
-    )
-    resize_to_layout!(fig)
+    gdf = DataFrames.groupby(dataframe, grouping)
+
+    fig = Figure(backgroundcolor = RGBf(0.98, 0.98, 0.98), size = (x_fig_size, y_fig_size))
 
     colors = [Makie.wong_colors(); Makie.wong_colors()];
     legend_entries = []
     for (i, col) in enumerate(unique(colors[indexin(categories, unique(categories))]))
-        LE = PolyElement(; color=col)
+        LE = MarkerElement(; color=col, marker=:circle)
         push!(legend_entries, [LE])
     end
 
-    f = rainclouds!(ga, categories.refs, dataframe.mean_dhw; color=colors[indexin(categories, unique(categories))], markersize=3, jitter_width=0.1, side_nudge=0.27)
-    f = rainclouds!(gb, categories.refs, dataframe.so_to_si; color=colors[indexin(categories, unique(categories))], markersize=3, jitter_width=0.1, side_nudge=0.27)
-    f = rainclouds!(gc, categories.refs, dataframe.conn_score; color=colors[indexin(categories, unique(categories))], markersize=3, jitter_width=0.1, side_nudge=0.27)
-    f = rainclouds!(gd, categories.refs, dataframe.total_strength; color=colors[indexin(categories, unique(categories))], markersize=3, jitter_width=0.1, side_nudge=0.27)
-    f = rainclouds!(ge, categories.refs, dataframe.initial_coral_cover; color=colors[indexin(categories, unique(categories))], markersize=3, jitter_width=0.1, side_nudge=0.27)
+    n_col = optimum_columns(length(unique(dataframe[:, grouping])))
+    plot_layout = figure_layouts(length(gdf), n_col)
+    last_figure = last(plot_layout)
+    if last(last_figure) < n_col
+        legend_position = (last_figure[1], last_figure[2]+1:n_col)
+    else
+        legend_position = (last_figure[1] + 1, 1:n_col)
+    end
 
-    Label(fig[1,1,TopLeft()], "a",
-        fontsize = 26,
-        font = :bold,
-        padding = (0, 5, 5, 0),
-        halign = :right
+    Legend(
+        fig[legend_position...],
+        legend_entries,
+        unique(categories),
+        nbanks=1
     )
-    Label(fig[1,2,TopLeft()], "b",
-        fontsize = 26,
-        font = :bold,
-        padding = (0, 5, 5, 0),
-        halign = :right
+    return fig, gdf, plot_layout, colors, categories
+end
+
+function _setup_grouped_axes(fig, plot_layout_xi, xticks; ylabel="", xlabel="", title="", xsize=220, ysize=150, background_color=:white)
+    # if plot_layout_xi == (1,1)
+    #     ax = Axis(
+    #                 fig[plot_layout_xi...];
+    #                 backgroundcolor=background_color,
+    #                 xlabel = xlabel,
+    #                 xlabelsize = 13,
+    #                 ylabelsize = 13,
+    #                 ylabel = ylabel,
+    #                 xticks = xticks,
+    #                 xticklabelsize=12,
+    #                 yticklabelsize=12,
+    #                 title=title,
+    #                 width=xsize,
+    #                 height=ysize
+    #     )
+    #     return ax
+    # end
+
+    ax = Axis(
+        fig[plot_layout_xi...];
+        backgroundcolor=background_color,
+        xticklabelsize=14,
+        yticklabelsize=14,
+        xticks = xticks,
+        xticksvisible=false,
+        title=title,
+        width=xsize,
+        height=ysize
     )
-    Label(fig[1,3,TopLeft()], "c",
-        fontsize = 26,
-        font = :bold,
-        padding = (0, 5, 5, 0),
-        halign = :right
+    return ax
+end
+
+function grouped_violin_plots(
+    dataframe,
+    bellwether_reefs_col,
+    grouping,
+    variable;
+    ylabel="", xlabel="", title="",
+    x_fig_size=2000,
+    y_fig_size=1700,
+    datalimits=(-Inf, Inf)
+)
+    n_col = optimum_columns(length(unique(dataframe[:, grouping])))
+    fig, gdf, plot_layout, colors, categories = _setup_grouped_figure(
+        dataframe,
+        bellwether_reefs_col,
+        grouping;
+        x_fig_size=2130,
+        y_fig_size=1500
     )
-    Label(fig[2,1,TopLeft()], "d",
-        fontsize = 26,
-        font = :bold,
-        padding = (0, 5, 5, 0),
-        halign = :right
-    )
-    Label(fig[2,2,TopLeft()], "e",
-        fontsize = 26,
-        font = :bold,
-        padding = (0, 5, 5, 0),
-        halign = :right
+    xsize, ysize = _axis_size(gdf, x_fig_size, y_fig_size, n_col)
+    xticks = (1:2, levels(categories))
+
+    labels = label_lines.([first(df.bioregion) for df in gdf])
+
+    for (xi, groupdf) in enumerate(gdf)
+        plot_layout_xi = plot_layout[xi]
+        categories = categorical(groupdf[:, bellwether_reefs_col])
+
+        bellwether_var_med = median(groupdf[groupdf[:, bellwether_reefs_col] .== "bellwether", variable])
+        non_bellwether_var_75 = quantile(groupdf[groupdf[:, bellwether_reefs_col] .== "non-bellwether", variable], 0.75)
+        non_bellwether_var_25 = quantile(groupdf[groupdf[:, bellwether_reefs_col] .== "non-bellwether", variable], 0.25)
+
+        if bellwether_var_med < non_bellwether_var_25
+            background_color = (:royalblue, 0.2)
+        elseif bellwether_var_med > non_bellwether_var_75
+            background_color = (:goldenrod1, 0.2)
+        else
+            background_color = :white
+        end
+
+        ax = _setup_grouped_axes(
+            fig,
+            plot_layout_xi,
+            xticks;
+            ylabel=ylabel,
+            xlabel=xlabel,
+            title=title,
+            xsize=xsize,
+            ysize=ysize,
+            background_color=background_color
+        )
+
+        f = violin!(
+            ax,
+            categories.refs,
+            groupdf[:, variable];
+            color=colors[indexin(categories, unique(categories))],
+            show_median=true,
+            datalimits=datalimits
+        )
+        f = rainclouds!(
+            ax,
+            categories.refs,
+            groupdf[:, variable];
+            color=:black,
+            markersize=5,
+            jitter_width=0.27,
+            side_nudge=0.001,
+            plot_boxplots=false,
+            clouds=nothing
+        )
+
+        if variable == :so_to_si
+            hlines!(1; color=(:gray, 0.5), linewidth=3)
+        end
+
+        Label(
+            fig[plot_layout_xi..., Top()],
+            labels[xi],
+            fontsize = 14,
+            font = :bold,
+            padding = (0, 5, 5, 0),
+            halign = :center
+        )
+    end
+
+    n_fig_row = first(fldmod1(length(gdf), n_col))
+    Label(
+        fig[1:n_fig_row, 0],
+        ylabel,
+        rotation= pi/2,
+        fontsize=14
     )
 
+    linkaxes!(filter(x -> x isa Axis, fig.content)...)
     resize_to_layout!(fig)
-    Legend(fig[2, 3], legend_entries, unique(categories), nbanks=2, padding = 15)
 
     display(fig)
 
     return fig
 end
 
-function bioregion_grouped_boxplots(
+function timeseries_xticks(length_t, years)
+    length_range = first(length_t):10:last(length_t)
+    years_length = collect(years)[length_range]
+
+    return (length_range, years_length)
+end
+
+
+# function grouped_violin_plots(
+#     dataframe,
+#     bellwether_reefs_col,
+#     grouping,
+#     variable;
+#     ylabel="", xlabel="", title="",
+#     xticks=(1:length(unique(dataframe[:, bellwether_reefs_col])), unique(dataframe[:, bellwether_reefs_col])),
+#     x_fig_size=2000,
+#     y_fig_size=1700,
+#     datalimits=extrema
+# )
+#     local violin_plot
+#     try
+#         violin_plot = _grouped_violin_plots(
+#             dataframe,
+#             bellwether_reefs_col,
+#             grouping,
+#             variable;
+#             ylabel="", xlabel="", title="",
+#             xticks=(1:length(unique(dataframe[:, bellwether_reefs_col])), unique(dataframe[:, bellwether_reefs_col])),
+#             x_fig_size=2000,
+#             y_fig_size=1700,
+#             datalimits=(-Inf, Inf)
+#         )
+#     catch y
+#         if isa(y, BoundsError) | isa()
+#             violin_plot = _grouped_violin_plots(
+#                 dataframe,
+#                 bellwether_reefs_col,
+#                 grouping,
+#                 variable;
+#                 ylabel="", xlabel="", title="",
+#                 xticks=(1:length(unique(dataframe[:, bellwether_reefs_col])), unique(dataframe[:, bellwether_reefs_col])),
+#                 x_fig_size=2000,
+#                 y_fig_size=1700,
+#                 datalimits=(-Inf, Inf)
+#             )
+#         else
+#             rethrow(y)
+#         end
+#     end
+
+#     return violin_plot
+# end
+
+function grouped_timeseries_plots(
+    dataframe,
+    bellwether_reefs_col,
+    correlation_col,
+    grouping,
+    length_t,
+    lag;
+    ylabel="", xlabel="", title="",
+    x_fig_size=2000,
+    y_fig_size=1700
+)
+    n_col = n_col = optimum_columns(length(unique(dataframe[:, grouping])))
+    fig, gdf, plot_layout, colors = _setup_grouped_figure(
+        dataframe,
+        bellwether_reefs_col,
+        grouping;
+        x_fig_size=2130,
+        y_fig_size=1500
+    )
+    xsize, ysize = _axis_size(gdf, x_fig_size, y_fig_size, n_col)
+    xticks = timeseries_xticks(length_t, 2022:2099)
+    xticks = (1:10:55, ["$(year)" for year in 2025:10:2075])
+
+    labels = label_lines.([_extract_name_and_correlation(df, bellwether_reefs_col, correlation_col) for df in gdf])
+
+    for (xi, groupdf) in enumerate(gdf)
+        plot_layout_xi = plot_layout[xi]
+        categories = categorical(groupdf[:, bellwether_reefs_col])
+
+        target_reefs = Matrix(
+        DataFrames.select(
+            groupdf[groupdf[:, bellwether_reefs_col] .== "bellwether", :],
+            DataFrames.Between(Symbol(length_t[1]), Symbol(length_t[2]-lag))
+            )
+        )'
+        target_reefs_median, target_reefs_lb, target_reefs_ub = bootstrap_median_ts(target_reefs)
+
+        non_target_reefs = Matrix(
+            DataFrames.select(
+                groupdf[groupdf[:, bellwether_reefs_col] .== "non-bellwether", :],
+                DataFrames.Between(Symbol(length_t[1]+lag), Symbol(length_t[2]))
+            )
+        )'
+        # if lag > 0
+        #     non_target_reefs_buffer = fill(missing, lag, size(non_target_reefs, 2))
+        #     non_target_reefs = vcat(non_target_reefs, non_target_reefs_buffer)
+        # end
+        non_target_reefs_median, non_target_reefs_lb, non_target_reefs_ub = bootstrap_median_ts(non_target_reefs)
+
+        ax = _setup_grouped_axes(
+            fig,
+            plot_layout_xi,
+            xticks;
+            ylabel=ylabel, xlabel=xlabel, title=title, xsize=xsize, ysize=ysize
+        )
+
+        #band_indices = first(length_t) + lag:last(length_t) + lag
+        band_indices = first(length_t):(last(length_t)-lag)
+        #bands = band!(band_indices, target_reefs_lb[band_indices], target_reefs_ub[band_indices]; color=(colors[2], 0.3))
+        band!(band_indices, target_reefs_lb, target_reefs_ub; color=(colors[2], 0.3))
+        series!(ax, target_reefs', solid_color=(colors[2], 0.5))
+        series!(target_reefs_median', solid_color=:red)
+
+        band!(band_indices, non_target_reefs_lb, non_target_reefs_ub; color=(colors[1], 0.3))
+        #band!(first(length_t):last(length_t), non_target_reefs_lb, non_target_reefs_ub; color=(colors[1], 0.3))
+        #series!(non_target_reefs', solid_color=(colors[1], 0.2))
+        series!(non_target_reefs_median', solid_color=:blue)
+
+        Label(
+            fig[plot_layout_xi..., Top()],
+            labels[xi],
+            fontsize = 14,
+            font = :bold,
+            padding = (0, 5, 5, 0),
+            halign = :center
+        )
+    end
+
+    n_fig_row = first(fldmod1(length(gdf), n_col))
+    Label(
+        fig[1:n_fig_row, 0],
+        ylabel,
+        rotation= pi/2,
+        fontsize=14
+    )
+
+    linkaxes!(filter(x -> x isa Axis, fig.content)...)
+    resize_to_layout!(fig)
+
+    display(fig)
+
+    return fig
+end
+
+function violin_limits(variable_vector)
+    if stat_range(variable_vector) < 2
+        max = ceil(maximum(variable_vector); digits=2)
+        min = floor(minimum(variable_vector); digits=2)
+
+        return (min, max)
+    elseif (stat_range(variable_vector) < 0.5) & (minimum(variable_vector) < 0.000001)
+        return (-0.005, ceil(maximum(variable_vector); digits=2))
+    end
+
+    return (-Inf, Inf)
+end
+
+function violin_plots!(
+    fig,
+    gdf,
+    bellwether_reefs_col,
+    variable,
+    labels,
+    plot_layout,
+    xsize,
+    ysize,
+    colors;
+    xlabel=xlabel,
+    ylabel=ylabel,
+    title="",
+    xticks=unique(dataframe[:, bellwether_reefs_col])
+)
+    for (xi, groupdf) in enumerate(gdf)
+        categories = categorical(groupdf[:, bellwether_reefs_col])
+
+        bellwether_var_med = median(groupdf[groupdf[:, bellwether_reefs_col] .== "bellwether", variable])
+        non_bellwether_var_75 = quantile(groupdf[groupdf[:, bellwether_reefs_col] .== "non-bellwether", variable], 0.75)
+        non_bellwether_var_25 = quantile(groupdf[groupdf[:, bellwether_reefs_col] .== "non-bellwether", variable], 0.25)
+
+        if bellwether_var_med < non_bellwether_var_25
+            background_color = (:royalblue, 0.2)
+        elseif bellwether_var_med > non_bellwether_var_75
+            background_color = (:goldenrod1, 0.2)
+        else
+            background_color = :white
+        end
+
+        if xi == 1
+            ax = Axis(
+                fig[plot_layout[xi]...];
+                backgroundcolor=background_color,
+                xlabel = xlabel,
+                xlabelsize = 13,
+                ylabelsize = 13,
+                ylabel = ylabel,
+                xticks = (unique(categories.refs), xticks),
+                xticklabelsize=12,
+                yticklabelsize=12,
+                title=title,
+                width=xsize,
+                height=ysize
+            )
+        else
+            ax = Axis(
+                fig[plot_layout[xi]...];
+                backgroundcolor=background_color,
+                xticklabelsize=12,
+                yticklabelsize=12,
+                xticks = (unique(categories.refs), ["",""]),
+                xticksvisible=false,
+                title=title,
+                width=xsize,
+                height=ysize
+            )
+        end
+
+        f = violin!(
+            ax,
+            categories.refs,
+            groupdf[:, variable];
+            color=colors[indexin(categories, unique(categories))],
+            show_median=true,
+            datalimits=extrema
+        )
+        f = rainclouds!(
+            ax,
+            categories.refs,
+            groupdf[:, variable];
+            color=:black,
+            markersize=5,
+            jitter_width=0.27,
+            side_nudge=0.001,
+            plot_boxplots=false,
+            clouds=nothing
+        )
+
+        if variable == :so_to_si
+            hlines!(1; color=(:gray, 0.5), linewidth=3)
+        end
+
+        Label(
+            fig[plot_layout[xi]..., Top()],
+            labels[xi],
+            fontsize = 11,
+            font = :bold,
+            padding = (0, 5, 5, 0),
+            halign = :center
+        )
+    end
+
+    if variable ∈ ["$(GCM)_mean_dhw", "$(GCM)_initial_coral_cover", :so_to_si]
+        linkaxes!(filter(x -> x isa Axis, fig.content)...)
+    end
+
+    return fig
+end
+
+function timeseries_plots!(
+    fig,
+    gdf,
+    bellwether_reefs_col,
+    plot_layout,
+    length_t,
+    lag,
+    labels,
+    xsize,
+    ysize;
+    xlabel=xlabel,
+    ylabel=ylabel,
+    title="",
+    xticks=unique(dataframe[:, bellwether_reefs_col])
+)
+    for (xi, groupdf) in enumerate(gdf)
+        categories = categorical(groupdf[:, bellwether_reefs_col])
+
+        target_reefs = Matrix(
+        DataFrames.select(
+            groupdf[groupdf[:, bellwether_reefs_col] .== "bellwether", :],
+            DataFrames.Between(Symbol(length_t[1]), Symbol(length_t[2]))
+            )
+        )'
+        if lag > 0
+            target_reefs_buffer = fill(missing, 4, size(target_reefs, 2))
+            target_reefs = vcat(target_reefs_buffer, target_reefs)
+        end
+        target_reefs_median, target_reefs_lb, target_reefs_ub = bootstrap_median_ts(target_reefs)
+
+        non_target_reefs = Matrix(
+            DataFrames.select(
+                groupdf[groupdf[:, bellwether_reefs_col] .== "non-bellwether", :],
+                DataFrames.Between(Symbol(length_t[1]), Symbol(length_t[2]))
+            )
+        )'
+        non_target_reefs_median, non_target_reefs_lb, non_target_reefs_ub = bootstrap_median_ts(non_target_reefs)
+
+        if xi == 1
+            ax = Axis(
+                fig[plot_layout[xi]...];
+                xlabel = xlabel,
+                xlabelsize = 13,
+                ylabelsize = 13,
+                ylabel = ylabel,
+                xticklabelsize=12,
+                yticklabelsize=12,
+                title=title,
+                width=xsize,
+                height=ysize
+            )
+        else
+            ax = Axis(
+                fig[plot_layout[xi]...];
+                xticklabelsize=12,
+                yticklabelsize=12,
+                title=title,
+                width=xsize,
+                height=ysize
+            )
+        end
+
+        band_indices = first(length_t) + lag:last(length_t) + lag
+        bands = band!(band_indices, target_reefs_lb[band_indices], target_reefs_ub[band_indices]; color=(colors[2], 0.3))
+        #series!(ax, target_reefs', solid_color=(colors[2], 0.3))
+        series!(target_reefs_median', solid_color=:red)
+
+        band!(first(length_t):last(length_t), non_target_reefs_lb, non_target_reefs_ub; color=(colors[1], 0.3))
+        #series!(non_target_reefs', solid_color=(colors[1], 0.2))
+        series!(non_target_reefs_median', solid_color=:blue)
+
+        Label(
+            fig[plot_layout[xi]..., Top()],
+            labels[xi],
+            fontsize = 11,
+            font = :bold,
+            padding = (0, 5, 5, 0),
+            halign = :center
+        )
+    end
+
+    return fig
+end
+
+function bioregion_grouped_violins(
     dataframe, bellwether_reefs_col, grouping, variable, ncol;
     xlabel="Bellwether Reefs",
     ylabel="Value",
     xticks=unique(dataframe[:, bellwether_reefs_col]),
-    title="",
-    method=nothing
+    title=""
 )
     dataframe = sort(dataframe, [bellwether_reefs_col, :management_area]; rev=true)
     categories = categorical(dataframe[:, bellwether_reefs_col])
 
     gdf = DataFrames.groupby(dataframe, grouping)
 
-    if length(gdf) < 27
-        labels = string.(collect('a':'z'))[1:length(gdf)]
-    else
-        error("number of bioregions > 26 (number of letters for labelling)")
-    end
+    # if length(gdf) < 27
+    #     labels = string.(collect('a':'z'))[1:length(gdf)]
+    # else
+    #     error("number of bioregions > 26 (number of letters for labelling)")
+    # end
+    labels = label_lines.([first(df.bioregion) for df in gdf])
 
-    fig = Figure(backgroundcolor = RGBf(0.98, 0.98, 0.98), size = (2130, 1500))
+    x_fig_size, y_fig_size = (2130, 1500)
+    fig = Figure(backgroundcolor = RGBf(0.98, 0.98, 0.98), size = (x_fig_size, y_fig_size))
 
     colors = [Makie.wong_colors(); Makie.wong_colors()];
     legend_entries = []
@@ -714,46 +945,43 @@ function bioregion_grouped_boxplots(
     end
 
     min_var, max_var = extrema(dataframe[:, variable])
-    var_difference = max_var - min_var
-    # if variable ∈ [:mean_dhw, :so_to_si]
-    #     limits = (nothing, (floor(Int64, min_var - 2), ceil(Int64, max_var + 2)))
-    #     yticks = round.(Int64, min_var:2:max_var)
-    # elseif variable == :initial_coral_cover
-    #     limits = (nothing, (floor(Int64, min_var - 5), ceil(Int64, max_var + 5)))
-    #     yticks = round.(Int64, min_var:10:max_var)
-    # elseif variable == :total_strength
-    #     limits = (nothing, (round(min_var - 0.3, digits=2), round(max_var + 0.3, digits=2)))
-    #     yticks = round.(min_var:0.5:max_var, digits=1)
-    # elseif variable ∈ [:dhw_cover_cor, :dhw_evenness_cor]
-    #     limits = (nothing, (-1.1,1.1))
-    #     yticks = (-1:0.5:1)
-    # elseif variable == :conn_score
-    #     limits = (nothing, nothing)
-    #     yticks = Makie.automatic
+    # var_difference = max_var - min_var
+    # # if variable ∈ [:mean_dhw, :so_to_si]
+    # #     limits = (nothing, (floor(Int64, min_var - 2), ceil(Int64, max_var + 2)))
+    # #     yticks = round.(Int64, min_var:2:max_var)
+    # # elseif variable == :initial_coral_cover
+    # #     limits = (nothing, (floor(Int64, min_var - 5), ceil(Int64, max_var + 5)))
+    # #     yticks = round.(Int64, min_var:10:max_var)
+    # # elseif variable == :total_strength
+    # #     limits = (nothing, (round(min_var - 0.3, digits=2), round(max_var + 0.3, digits=2)))
+    # #     yticks = round.(min_var:0.5:max_var, digits=1)
+    # # elseif variable ∈ [:dhw_cover_cor, :dhw_evenness_cor]
+    # #     limits = (nothing, (-1.1,1.1))
+    # #     yticks = (-1:0.5:1)
+    # # elseif variable == :conn_score
+    # #     limits = (nothing, nothing)
+    # #     yticks = Makie.automatic
+    # # end
+
+    # if var_difference < 4
+    #     limits = (nothing, (min_var - (var_difference/5), max_var + (var_difference/5)))
+    #     yticks = round.(min_var:(var_difference / 4):max_var; digits=3)
+    # else
+    #     limits = (nothing, (floor(Int64, min_var - 1), ceil(Int64, max_var + 1)))
+    #     yticks = round.(min_var:(var_difference / 4):max_var; digits=1)
     # end
 
-    if var_difference < 4
-        limits = (nothing, (min_var - (var_difference/5), max_var + (var_difference/5)))
-        yticks = round.(min_var:(var_difference / 4):max_var; digits=3)
-    else
-        limits = (nothing, (floor(Int64, min_var - 1), ceil(Int64, max_var + 1)))
-        yticks = round.(min_var:(var_difference / 4):max_var; digits=1)
-    end
+    # if length(gdf) < 10
+    #     xsize, ysize = 180, 120
+    #     label_size = 12
+    # else
+    #     xsize, ysize = 150, 150
+    #     label_size = 12
+    # end
 
-    if length(gdf) < 10
-        xsize, ysize = 180, 120
-        label_size = 12
-    else
-        xsize, ysize = 150, 150
-        label_size = 12
-    end
-
-    management_areas = Dict(
-        "Far Northern Management Area" => (:red, 0.7),
-        "Cairns/Cooktown Management Area" => (:green, 0.7),
-        "Townsville/Whitsunday Management Area" => (:blue, 0.7),
-        "Mackay/Capricorn Management Area" => (:Orange, 0.7)
-    )
+    xsize = x_fig_size / (ncol*2)
+    n_fig_row = first(fldmod1(length(gdf), ncol))
+    ysize = y_fig_size / (n_fig_row*1.5)
 
     for (xi, groupdf) in enumerate(gdf)
         categories = categorical(groupdf[:, bellwether_reefs_col])
@@ -780,8 +1008,8 @@ function bioregion_grouped_boxplots(
                 ylabel = ylabel,
                 xticks = (unique(categories.refs), xticks),
                 xticklabelsize=label_size,
-                limits= limits,
-                yticks = yticks,
+                #limits= limits,
+                #yticks = yticks,
                 yticklabelsize=label_size,
                 title=title,
                 width=xsize,
@@ -795,39 +1023,49 @@ function bioregion_grouped_boxplots(
                 yticklabelsize=label_size,
                 xticks = (unique(categories.refs), ["",""]),
                 xticksvisible=false,
-                limits= limits,
-                yticks = yticks,
+                #limits= limits,
+                #yticks = yticks,
                 title=title,
                 width=xsize,
                 height=ysize
             )
         end
-        f = rainclouds!(
+
+        f = violin!(
             ax,
             categories.refs,
             groupdf[:, variable];
             color=colors[indexin(categories, unique(categories))],
+            show_median=true
+        )
+        f = rainclouds!(
+            ax,
+            categories.refs,
+            groupdf[:, variable];
+            color=:black,
+            markersize=5,
             jitter_width=0.27,
-            markersize=3.5,
-            cloudwidth=0.75,
-            gap=0.01,
-            side_nudge=0.32,
+            side_nudge=0.001,
+            plot_boxplots=false,
+            clouds=nothing
         )
 
         if variable == :so_to_si
-            hlines!(1; color=(:gray, 0.7))
+            hlines!(1; color=(:gray, 0.5), linewidth=3)
         end
 
-        bioregion_label_color = management_areas[first(unique(groupdf.management_area))]
         Label(
-            fig[fldmod1(xi, ncol)..., TopLeft()],
+            fig[fldmod1(xi, ncol)..., Top()],
             labels[xi],
-            color = bioregion_label_color,
-            fontsize = 15,
+            fontsize = 11,
             font = :bold,
             padding = (0, 5, 5, 0),
-            halign = :right
+            halign = :center
         )
+    end
+
+    if variable ∈ ["$(GCM)_mean_dhw", "$(GCM)_initial_coral_cover", :so_to_si]
+        linkaxes!(filter(x -> x isa Axis, fig.content)...)
     end
 
     last_figure = fldmod1(length(gdf), ncol)
@@ -843,6 +1081,22 @@ function bioregion_grouped_boxplots(
     return fig
 end
 
+function bootstrap_median_ts(timeseries)
+    ts_median = Vector{Union{Missing, Float64}}(missing, size(timeseries, 1))
+    ts_lb = Vector{Union{Missing, Float64}}(missing, size(timeseries, 1))
+    ts_ub = Vector{Union{Missing, Float64}}(missing, size(timeseries, 1))
+
+    for t in 1:size(timeseries, 1)
+        if all(.!ismissing.(timeseries[t, :]))
+            bootstrap_t = bootstrap(median, timeseries[t, :], BasicSampling(1000))
+            ts_median[t] = first(bootstrap_t.t0)
+            ts_lb[t] = getindex(getindex(confint(bootstrap_t, NormalConfInt(0.95)), 1), 2)
+            ts_ub[t] = getindex(getindex(confint(bootstrap_t, NormalConfInt(0.95)), 1), 3)
+        end
+    end
+
+    return ts_median, ts_lb, ts_ub
+end
 
 function bioregion_grouped_lagged_timeseries(
     dataframe, bellwether_reefs_col, length_t, grouping, lag, ncol;
@@ -855,13 +1109,10 @@ function bioregion_grouped_lagged_timeseries(
 
     gdf = DataFrames.groupby(dataframe, grouping)
 
-    if length(gdf) < 27
-        labels = string.(collect('a':'z'))[1:length(gdf)]
-    else
-        error("number of bioregions > 26 (number of letters for labelling)")
-    end
+    labels = label_lines.([first(df.bioregion) for df in gdf])
 
-    fig = Figure(backgroundcolor = RGBf(0.98, 0.98, 0.98), size = (2130, 1500))
+    x_fig_size, y_fig_size = (2130, 1500)
+    fig = Figure(backgroundcolor = RGBf(0.98, 0.98, 0.98), size = (x_fig_size, y_fig_size))
 
     colors = [Makie.wong_colors(); Makie.wong_colors()];
     legend_entries = [
@@ -869,35 +1120,9 @@ function bioregion_grouped_lagged_timeseries(
         [PolyElement(;color = colors[2]), LineElement(;color=:red)]
     ]
 
-    min_var, max_var = extrema(
-        Matrix(DataFrames.select(dataframe, DataFrames.Between(
-            Symbol(length_t[1]), Symbol(length_t[2]))
-        ))
-    )
-    var_difference = max_var - min_var
-    if bellwether_reefs_col == :target_reefs_bior_evenness_cat
-        limits = (nothing, (min_var, max_var))
-        yticks = round.(min_var:(var_difference / 3):max_var; digits=2)
-    else
-        limits = (nothing, (floor(Int64, min_var - 2), ceil(Int64, max_var + 2)))
-        yticks = round.(Int64, min_var:(var_difference / 3):max_var)
-    end
-
-
-    if ncol < 5
-        xsize, ysize = 180, 110
-        label_size = 12
-    else
-        xsize, ysize = 150, 140
-        label_size = 12
-    end
-
-    management_areas = Dict(
-        "Far Northern Management Area" => (:red, 0.7),
-        "Cairns/Cooktown Management Area" => (:green, 0.7),
-        "Townsville/Whitsunday Management Area" => (:blue, 0.7),
-        "Mackay/Capricorn Management Area" => (:Orange, 0.7)
-    )
+    xsize = x_fig_size / (ncol*2)
+    n_fig_row = first(fldmod1(length(gdf), ncol))
+    ysize = y_fig_size / (n_fig_row*1.5)
 
     for (xi, groupdf) in enumerate(gdf)
         categories = categorical(groupdf[:, bellwether_reefs_col])
@@ -909,10 +1134,12 @@ function bioregion_grouped_lagged_timeseries(
             )
         )'
         if lag > 0
-            target_reefs_buffer = fill(missing, lag, size(target_reefs, 2))
+            target_reefs_buffer = fill(missing, 4, size(target_reefs, 2))
             target_reefs = vcat(target_reefs_buffer, target_reefs)
         end
-        target_reefs_median = skipmissing_median(target_reefs)
+        target_reefs_median, target_reefs_lb, target_reefs_ub = bootstrap_median_ts(target_reefs)
+
+
 
         non_target_reefs = Matrix(
             DataFrames.select(
@@ -920,7 +1147,7 @@ function bioregion_grouped_lagged_timeseries(
                 DataFrames.Between(Symbol(length_t[1]), Symbol(length_t[2]))
             )
         )'
-        non_target_reefs_median = median(non_target_reefs, dims=2)
+        non_target_reefs_median, non_target_reefs_lb, non_target_reefs_ub = bootstrap_median_ts(non_target_reefs)
 
         if xi == 1
             ax = Axis(
@@ -930,8 +1157,6 @@ function bioregion_grouped_lagged_timeseries(
                 ylabelsize = label_size+1,
                 ylabel = ylabel,
                 xticklabelsize=label_size,
-                limits= limits,
-                yticks = yticks,
                 yticklabelsize=label_size,
                 title=title,
                 width=xsize,
@@ -941,8 +1166,6 @@ function bioregion_grouped_lagged_timeseries(
             ax = Axis(
                 fig[fldmod1(xi, ncol)...];
                 xticklabelsize=label_size,
-                limits= limits,
-                yticks = yticks,
                 yticklabelsize=label_size,
                 title=title,
                 width=xsize,
@@ -950,22 +1173,26 @@ function bioregion_grouped_lagged_timeseries(
             )
         end
 
-        lines = series!(ax, target_reefs', solid_color=(colors[2], 0.3))
-        series!(non_target_reefs', solid_color=(colors[1], 0.15))
+        band_indices = first(length_t) + lag:last(length_t) + lag
+        bands = band!(band_indices, target_reefs_lb[band_indices], target_reefs_ub[band_indices]; color=(colors[2], 0.3))
+        #series!(ax, target_reefs', solid_color=(colors[2], 0.3))
         series!(target_reefs_median', solid_color=:red)
+
+        band!(first(length_t):last(length_t), non_target_reefs_lb, non_target_reefs_ub; color=(colors[1], 0.3))
+        #series!(non_target_reefs', solid_color=(colors[1], 0.2))
         series!(non_target_reefs_median', solid_color=:blue)
 
-        bioregion_label_color = management_areas[first(unique(groupdf.management_area))]
         Label(
-            fig[fldmod1(xi, ncol)..., TopLeft()],
+            fig[fldmod1(xi, ncol)..., Top()],
             labels[xi],
-            color = bioregion_label_color,
-            fontsize = 15,
+            fontsize = 11,
             font = :bold,
             padding = (0, 5, 5, 0),
-            halign = :right
+            halign = :center
         )
     end
+
+    linkaxes!(filter(x -> x isa Axis, fig.content)...)
 
     last_figure = fldmod1(length(gdf), ncol)
     if last_figure[2] < ncol
@@ -978,6 +1205,10 @@ function bioregion_grouped_lagged_timeseries(
     display(fig)
 
     return fig, gdf.keymap
+end
+
+function figure_layouts(n_bioregions, n_col)
+    return [fldmod1(x, n_col) for x in 1:n_bioregions]
 end
 
 function plot_map_bellwether_reefs(gdf::Union{DataFrame,DataFrameRow}, color_by::Symbol, bellwether_reefs_col::Symbol; geom_col::Symbol=:geometry)
@@ -1033,4 +1264,16 @@ function plot_map_bellwether_reefs(gdf::Union{DataFrame,DataFrameRow}, color_by:
 
     display(f)
     return f, ga
+end
+
+function optimum_columns(n_bioregions)
+    if n_bioregions < 5
+        return 2
+    elseif n_bioregions < 10
+        return 3
+    elseif n_bioregions < 20
+        return 4
+    end
+
+    return 5
 end

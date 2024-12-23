@@ -1,6 +1,7 @@
 using Glob
 using Dates
 using CategoricalArrays
+using NetCDF
 
 using
     CSV,
@@ -29,6 +30,7 @@ import ArchGDAL as AG
 import GeoInterface as GI
 
 include("plotting_functions.jl")
+include("ADRIA_DataCube_functions.jl")
 
 gbr_domain_path = "c:/Users/bgrier/Documents/Projects/ADRIA_Domains/rme_ml_2024_01_08/"
 conn_path = joinpath(gbr_domain_path, "data_files/con_bin")
@@ -302,13 +304,14 @@ Vector of correlation values for each lag in `lags`.
 function cross_correlation(
     x::AbstractVector{<:Real},
     y::AbstractVector{<:Real},
-    lags::AbstractVector{<:Integer},
+    lag::Int64,
+    correlation_function::Function,
     demean::Bool
     )
 
-    r = Vector{Float64}()
+    #r = Vector{Float64}()
     lx = length(x)
-    m = length(lags)
+    #m = length(lags)
 
     if demean
         zx::Vector{Float64} = x .- mean(x)
@@ -320,8 +323,9 @@ function cross_correlation(
         zy::Vector{Float64} = y .- mean(y)
     end
 
-    for k = 1 : m  # foreach lag value
-        l = lags[k]
+    #for k = 1 : m  # foreach lag value
+        #l = lags[k]
+        l=lag
 
         if l >= 0
            sub_x = zx[1:lx-l]
@@ -331,142 +335,183 @@ function cross_correlation(
            sub_y = zy[1:lx+l]
         end
 
-        sc = sqrt(dot(sub_x, sub_x) * dot(sub_y, sub_y))
-
-        push!(r, dot(sub_x, sub_y) / sc)
-    end
+        #push!(r, correlation_function(sub_x, sub_y))
+        r = correlation_function(sub_x, sub_y)
+    #end
 
    return r
 end
 
-"""
-    lagged_cluster_analysis(
-        region_rel_cover::YAXArray,
-        region_clusters::Vector{Int64},
-        lags::AbstractVector{<:Integer}
-    )::DataFrame
+function pearsons_cor(x, y)
+    sc = sqrt(dot(x, x) * dot(y, y))
+    r = dot(x, y) / sc
 
-Perform lagged cross correlation analysis across a number of clusters for a target
-region. Uses `mapslices_toFloat64()` and `cross_correlation()` functions.
-
-# Arguments
-- `region_rel_cover` : YAXArray of cover trajectories for each reef in the target region.
-- `region_clusters` : Vector of cluster categories assigned to each reef.
-- `lags` : Vector of lags to apply with `cross_correlation()`. Positive lags test for `x` leading `y`, negative lags test for `y` leading `x`.
-
-# Returns
-DataFrame of correlation values for each reef in each cluster with columns for the reef RME_UNIQUE_ID, cluster category and correlation values for each lag step.
-"""
-function lagged_cluster_analysis(
-        region_rel_cover::YAXArray,
-        region_clusters::Vector{Int64},
-        lags::AbstractVector{<:Integer}
-    )::DataFrame
-
-    lags_symbols = [Symbol("lag" * string(lags[a])) for a in eachindex(lags)]
-    cross_cor = DataFrame(
-        [Vector{Any}() for _ in 1:(length(lags)+2)],
-        [:RME_UNIQUE_ID; :t_cluster ; lags_symbols]
-    )
-
-    for cluster in 1:n_clusters
-        target_cluster = region_rel_cover[:, (region_clusters .== cluster)]
-
-        cluster_median = Float64.(mapslices(median, target_cluster, dims=[:sites]))
-
-        for (ind, reef) in enumerate(eachcol(target_cluster))
-            reef_name = target_cluster.sites[ind]
-            correlation = cross_correlation(reef, cluster_median, lags, true)
-
-            push!(cross_cor, [reef_name; cluster; correlation])
-        end
-    end
-
-    return cross_cor
+    return r
 end
 
-"""
-    lagged_region_analysis(
-        region_rel_cover::YAXArray,
-        reg::String,
-        lags::AbstractVector{<:Integer}
-    )::DataFrame
-
-Perform lagged cross correlation analysis across a a target region.
-Uses `mapslices_toFloat64()` and `cross_correlation()` functions.
-
-# Arguments
-- `region_rel_cover` : YAXArray of cover trajectories for each reef in the target region.
-- `reg` : String of region name.
-- `lags` : Vector of lags to apply with `cross_correlation()`. Positive lags test for `x` leading `y`, negative lags test for `y` leading `x`.
-
-# Returns
-DataFrame of correlation values for each reef in target_region with columns for the reef RME_UNIQUE_ID, region and correlation values for each lag step.
-"""
-function lagged_region_analysis(
-        region_rel_cover::YAXArray,
-        reg::String,
-        lags::AbstractVector{<:Integer}
-    )::DataFrame
-
-    lags_symbols = [Symbol("lag" * string(lags[a])) for a in eachindex(lags)]
-    cross_cor = DataFrame(
-        [Vector{Any}() for _ in 1:(length(lags)+2)],
-        [:RME_UNIQUE_ID; :region; lags_symbols]
-    )
-
-    reg_median = Float64.(mapslices(median, region_rel_cover, dims=[:sites]))
-
-    for (ind, reef) in enumerate(eachcol(region_rel_cover))
-        reef_name = region_rel_cover.sites[ind]
-        correlation = cross_correlation(reef, reg_median, lags, true)
-
-        push!(cross_cor, [reef_name; reg; correlation])
-    end
-
-    return cross_cor
+function CE(x)
+    return sqrt(sum(diff(x).^2))
 end
 
+function CF(x, y)
+    return max(CE(x), CE(y)) / min(CE(x), CE(y))
+end
+
+function CID(x, y)
+    return (sqrt(sum((x - y) .^2)) * CF(x, y))
+end
+
+# """
+#     lagged_cluster_analysis(
+#         region_rel_cover::YAXArray,
+#         region_clusters::Vector{Int64},
+#         lags::AbstractVector{<:Integer}
+#     )::DataFrame
+
+# Perform lagged cross correlation analysis across a number of clusters for a target
+# region. Uses `mapslices_toFloat64()` and `cross_correlation()` functions.
+
+# # Arguments
+# - `region_rel_cover` : YAXArray of cover trajectories for each reef in the target region.
+# - `region_clusters` : Vector of cluster categories assigned to each reef.
+# - `lags` : Vector of lags to apply with `cross_correlation()`. Positive lags test for `x` leading `y`, negative lags test for `y` leading `x`.
+
+# # Returns
+# DataFrame of correlation values for each reef in each cluster with columns for the reef RME_UNIQUE_ID, cluster category and correlation values for each lag step.
+# """
+# function lagged_cluster_analysis(
+#         region_rel_cover::YAXArray,
+#         region_clusters::Vector{Int64},
+#         lags::AbstractVector{<:Integer}
+#     )::DataFrame
+
+#     lags_symbols = [Symbol("lag" * string(lags[a])) for a in eachindex(lags)]
+#     cross_cor = DataFrame(
+#         [Vector{Any}() for _ in 1:(length(lags)+2)],
+#         [:RME_UNIQUE_ID; :t_cluster ; lags_symbols]
+#     )
+
+#     for cluster in 1:n_clusters
+#         target_cluster = region_rel_cover[:, (region_clusters .== cluster)]
+
+#         cluster_median = Float64.(mapslices(median, target_cluster, dims=[:sites])) # Have to remove the target reef before
+
+#         for (ind, reef) in enumerate(eachcol(target_cluster))
+#             reef_name = target_cluster.sites[ind]
+#             correlation = cross_correlation(reef, cluster_median, lags, true)
+
+#             push!(cross_cor, [reef_name; cluster; correlation])
+#         end
+#     end
+
+#     return cross_cor
+# end
+
+# """
+#     lagged_region_analysis(
+#         region_rel_cover::YAXArray,
+#         reg::String,
+#         lags::AbstractVector{<:Integer}
+#     )::DataFrame
+
+# Perform lagged cross correlation analysis across a a target region.
+# Uses `mapslices_toFloat64()` and `cross_correlation()` functions.
+
+# # Arguments
+# - `region_rel_cover` : YAXArray of cover trajectories for each reef in the target region.
+# - `reg` : String of region name.
+# - `lags` : Vector of lags to apply with `cross_correlation()`. Positive lags test for `x` leading `y`, negative lags test for `y` leading `x`.
+
+# # Returns
+# DataFrame of correlation values for each reef in target_region with columns for the reef RME_UNIQUE_ID, region and correlation values for each lag step.
+# """
+# function lagged_region_analysis(
+#         region_rel_cover::YAXArray,
+#         reg::String,
+#         lags::AbstractVector{<:Integer}
+#     )::DataFrame
+
+#     lags_symbols = [Symbol("lag" * string(lags[a])) for a in eachindex(lags)]
+#     cross_cor = DataFrame(
+#         [Vector{Any}() for _ in 1:(length(lags)+2)],
+#         [:RME_UNIQUE_ID; :region; lags_symbols]
+#     )
+
+#     reg_median = Float64.(mapslices(median, region_rel_cover, dims=[:sites]))
+
+#     for (ind, reef) in enumerate(eachcol(region_rel_cover))
+#         reef_name = region_rel_cover.sites[ind]
+#         correlation = cross_correlation(reef, reg_median, lags, true)
+
+#         push!(cross_cor, [reef_name; reg; correlation])
+#     end
+
+#     return cross_cor
+# end
+
+# """
+#     subregion_analysis(
+#         subregions::Vector{String},
+#         rel_cover::YAXArray,
+#         context_layers::DataFrame,
+#         category::Symbol
+#     )::DataFrame
+
+# Apply lagged_region_analysis across a list of subregions such as closest_ports or bioregions.
+# Uses `lagged_region_analysis()` function, lags must be specified.
+
+# # Arguments
+# - `subregions` : Vector of subregion names to apply analysis to. Must be found in `context_layers.category` column.
+# - `rel_cover` : YAXArray of cover trajectories for each reef.
+# - `context_layers` : DataFrame containing columns `RME_UNIQUE_ID` and category column matching `subregions`.
+# - `category` : Column name in `context_layers` that contains `subregions` for each reef.
+# - `lags` : Vector of lags to apply with `cross_correlation()`. Positive lags test for `x` leading `y`, negative lags test for `y` leading `x`.
+
+# # Returns
+# DataFrame of correlation values for each reef and surrounding reefs in 'subregion'. Contains RME_UNIQUE_ID, region and correlation values for each lag step.
+# """
+# function subregion_analysis(
+#     subregions::Vector{String},
+#     rel_cover::YAXArray,
+#     context_layers::DataFrame,
+#     category::Symbol,
+#     lags::AbstractVector{<:Integer}
+#     )::DataFrame
+
+#     lagged_analysis_sub = DataFrame()
+#     for subregion in subregions
+#         subregion_reefs = context_layers[(context_layers[:, category] .== subregion), :RME_UNIQUE_ID]
+#         subregion_cover = rel_cover[:, (findall(rel_cover.sites .∈ [subregion_reefs]))]
+
+#         subregion_lagged_analysis = lagged_region_analysis(subregion_cover, subregion, lags)
+#         lagged_analysis_sub = vcat(lagged_analysis_sub, subregion_lagged_analysis)
+#     end
+
+#     return lagged_analysis_sub
+# end
+
 """
-    subregion_analysis(
-        subregions::Vector{String},
-        rel_cover::YAXArray,
-        context_layers::DataFrame,
-        category::Symbol
-    )::DataFrame
+    cluster_correlation(reef_clusters, timeseries, lag)
 
-Apply lagged_region_analysis across a list of subregions such as closest_ports or bioregions.
-Uses `lagged_region_analysis()` function, lags must be specified.
-
-# Arguments
-- `subregions` : Vector of subregion names to apply analysis to. Must be found in `context_layers.category` column.
-- `rel_cover` : YAXArray of cover trajectories for each reef.
-- `context_layers` : DataFrame containing columns `RME_UNIQUE_ID` and category column matching `subregions`.
-- `category` : Column name in `context_layers` that contains `subregions` for each reef.
-- `lags` : Vector of lags to apply with `cross_correlation()`. Positive lags test for `x` leading `y`, negative lags test for `y` leading `x`.
-
-# Returns
-DataFrame of correlation values for each reef and surrounding reefs in 'subregion'. Contains RME_UNIQUE_ID, region and correlation values for each lag step.
+Calculate the correlation between each reef timeseries and the median timeseries for other reefs
+in the same cluster. Clusters are defined with `reef`
 """
-function subregion_analysis(
-    subregions::Vector{String},
-    rel_cover::YAXArray,
-    context_layers::DataFrame,
-    category::Symbol,
-    lags::AbstractVector{<:Integer}
-    )::DataFrame
+function cluster_correlation(reef_clusters, timeseries, lag, func)
+    correlation_values = Vector{Union{Missing, Float64}}(missing, length(reef_clusters))
 
-    lagged_analysis_sub = DataFrame()
-    for subregion in subregions
-        subregion_reefs = context_layers[(context_layers[:, category] .== subregion), :RME_UNIQUE_ID]
-        subregion_cover = rel_cover[:, (findall(rel_cover.sites .∈ [subregion_reefs]))]
+    for (ind, cluster) in enumerate(reef_clusters)
+        indices_not_target = findall(reef_clusters .== cluster)
+        indices_not_target = indices_not_target[indices_not_target .!= ind]
 
-        subregion_lagged_analysis = lagged_region_analysis(subregion_cover, subregion, lags)
-        lagged_analysis_sub = vcat(lagged_analysis_sub, subregion_lagged_analysis)
+        target_timeseries = timeseries[sites = ind]
+        non_target_median = timeseries[sites = indices_not_target]
+        non_target_median = vec(mapslices(median, non_target_median.data, dims=2))
+        correlation_values[ind] = cross_correlation(target_timeseries, non_target_median, lag, func, true)
     end
 
-    return lagged_analysis_sub
+    return correlation_values
 end
+
 
 canonical_reefs = find_latest_file("../../canonical-reefs/output/")
 canonical_reefs = GDF.read(canonical_reefs)
@@ -630,24 +675,40 @@ function prepare_ReefMod_results(
     taxa_median = Float64.(mapslices(median, taxa_cover, dims=[:scenarios]))
     cyc_median = Float64.(mapslices(median, results.cyc_mortality; dims=[:scenarios]))
     cots_median = Float64.(mapslices(median, results.cots_mortality; dims=[:scenarios]))
-    dhw_median = Float64.(mapslices(median, results.dhw_mortality; dims=[:scenarios]))
+    dhw_mortality_median = Float64.(mapslices(median, results.dhw_mortality; dims=[:scenarios]))
     taxa_evenness = _coral_evenness(taxa_median; method=evenness_method, evenness_weight=evenness_weight, cover_weight=cover_weight)
+
+    dhw_median = Float64.(mapslices(median, results.dhw, dims=[:scenarios]))
+    negative_normal_dhw = -normalise(dhw_median.data, (0,1))
 
     axlist = (
                 Dim{:timesteps}(start_year:end_year),
                 Dim{:sites}(location_ids)
     )
     cover_median = rebuild(cover_median, dims=axlist)
+    taxa_cover = rebuild(
+        taxa_median,
+        dims=(
+            Dim{:timesteps}(start_year:end_year),
+            Dim{:sites}(location_ids),
+            Dim{:species}(1:6)
+        )
+    )
     taxa_evenness = rebuild(taxa_evenness, dims=axlist)
     cyc_mortality = rebuild(cyc_median, dims=axlist)
     cots_mortality = rebuild(cots_median, dims=axlist)
-    dhw_mortality = rebuild(dhw_median, dims=axlist)
+    dhw_mortality = rebuild(dhw_mortality_median, dims=axlist)
+    dhw = rebuild(dhw_median, dims=axlist)
+    negative_normal_dhw = YAXArray(axlist, negative_normal_dhw)
     arrays = Dict(
         :total_relative_cover_median => cover_median,
+        :taxa_cover => taxa_cover,
         :scaled_taxa_evenness => taxa_evenness,
         :dhw_mortality => dhw_mortality,
         :cots_mortality => cots_mortality,
-        :cyc_mortality => cyc_mortality
+        :cyc_mortality => cyc_mortality,
+        :dhw => dhw,
+        :negative_normal_dhw => negative_normal_dhw
     )
     ds = Dataset(; arrays...)
     savedataset(ds, path="$(result_store_dir)/$(fn)", driver=:netcdf, overwrite=true)
@@ -665,18 +726,18 @@ Normalise the vector `x` so that it's minimum value is `a` and its maximum value
 - `normalise([1, 5, 10, 78] (-1,1))` to return a vector with min=-1 and max=1.
 """
 function normalise(x, (a, b))
-    x_norm = (b - a) .* ((x .- minimum(x)) ./ (maximum(x) .- minimum(x))) .+ a
+    x_norm = (b - a) .* ((x .- minimum(filter(!isnan,x))) ./ (maximum(filter(!isnan,x)) .- minimum(filter(!isnan,x)))) .+ a
     return x_norm
 end
 
-function _coral_evenness(r_taxa_cover::AbstractArray{T}; method="scaled_evenness_multiplicative", evenness_weight=1, cover_weight=1)::AbstractArray{T} where {T<:Real}
+function _coral_evenness(r_taxa_cover::AbstractArray{T}; method="scaled_evenness_additive", evenness_weight=1, cover_weight=1)::AbstractArray{T} where {T<:Real}
     # Evenness as a functional diversity metric
     n_steps, n_locs, n_grps = size(r_taxa_cover)
 
     # Sum across groups represents functional diversity
     # Group evenness (Hill 1973, Ecology 54:427-432)
     loc_cover = dropdims(sum(r_taxa_cover, dims=3), dims=3)
-    simpsons_diversity::YAXArray = ADRIA.ZeroDataCube((:timesteps, :locations), (n_steps, n_locs))
+    simpsons_diversity::YAXArray = ZeroDataCube((:timesteps, :locations), (n_steps, n_locs))
 
     if method == "scaled_evenness_multiplicative"
         for loc in axes(loc_cover, 2)
@@ -725,7 +786,7 @@ function extract_timeseries(rs_YAXArray, reefs, context_cols)
 
     data = permutedims(df, 1, "RME_UNIQUE_ID")
     data = data[data.RME_UNIQUE_ID .∈ [reefs.RME_UNIQUE_ID],:]
-    data = leftjoin(data, reefs[:, vcat([:RME_UNIQUE_ID, context_cols]...)], on=:RME_UNIQUE_ID)
+    data = leftjoin(data, reefs[:, vcat(["RME_UNIQUE_ID", context_cols]...)], on=:RME_UNIQUE_ID)
     data = dropmissing(data)
 
     return data
@@ -891,4 +952,100 @@ function load_result_store(dir_name::String, n_reps::Int64)::ResultStore
         n_reefs,
         n_reps
     )
+end
+
+function stat_range(x)
+    isempty(x) && error("Does not support empty vectors")
+    min = typemax(eltype(x))
+    max = typemin(eltype(x))
+    for xi in x
+        isnan(xi) && error("Does not support NaNs in vectors")
+        min = ifelse(min > xi, xi, min)
+        max = ifelse(max < xi, xi, max)
+    end
+    return max - min
+end
+
+function bellwether_glmm_fit(dataset)
+    y_term_cover = term("$(GCM)_target_reefs_bior")
+    mean_dhw_term = term("$(GCM)_mean_dhw")
+    icc_term = term("$(GCM)_initial_coral_cover")
+    #dhw_cover_cor_term = term("$(GCM)_dhw_cover_cor")
+    cots_mortality_term = term("$(GCM)_mean_cots_mortality")
+
+    glmm_form =
+        y_term_cover ~
+        mean_dhw_term +
+        term(:so_to_si) +
+        term(:conn_score) +
+        term(:total_strength) +
+        icc_term +
+        #dhw_cover_cor_term +
+        cots_mortality_term +
+        (term(1)|term(:bioregion))
+    glmm_fit = fit(MixedModel, glmm_form, dataset, Bernoulli())
+    coef_table = coeftable(glmm_fit)
+    results = DataFrame(
+        Names=coef_table.rownms,
+        Coef=coef_table.cols[1],
+        std_error=coef_table.cols[2],
+        z=coef_table.cols[3],
+        p=coef_table.cols[4]
+    )
+
+    return results
+end
+
+function bioregion_counts(dataset, bellwether_reefs_col, fn, GCM)
+    reef_counts = combine(groupby(dataset, :bioregion)) do sdf
+        return (bellwether_reefs = sum(sdf[:, bellwether_reefs_col]), total_reefs=nrow(sdf))
+    end
+
+    removed_bioregions = reef_counts[reef_counts[:, :bellwether_reefs] .< 5, :bioregion]
+
+    CSV.write(fn, reef_counts)
+
+    return removed_bioregions
+end
+
+function naive_split_metric(obs::Vector, n_members::Int, metric::Function=RMSE)
+    obs_chunks = Iterators.partition(obs, n_members)
+    scores = Vector{Float64}(undef, ceil(Int64, length(obs) / n_members))
+
+    for (idx, chunk) in enumerate(obs_chunks)
+        scores[idx] = metric(chunk)
+    end
+
+    return scores
+end
+
+"""
+    temporal_variability(x::AbstractVector{<:Real})
+    temporal_variability(x::AbstractArray{<:Real, 2})
+    temporal_variability(x::AbstractArray{<:Real}, func_or_data...)
+
+The V meta-metric.
+
+As a meta-metric, it can be applied to any combination of
+metrics (including itself), assuming \$x\$ is bound between 0 and 1.
+If this is not the case, consider normalizing values first.
+
+# Examples
+```julia-repl
+# Apply V to a time series
+julia> temporal_variability(rand(50))
+
+# Apply V to an ensemble of time series
+julia> x = rand(50, 200)
+julia> temporal_variability(x)
+
+# Create and apply a modified V metric to an ensemble of time series.
+# Where the argument is an array and not a function, the data is used directly
+# and so it is assumed all matrices are of the same size and shape.
+julia> temporal_variability(x, temporal_variabilty, temporal_variability(P(x)))
+julia> temporal_variability(x, temporal_variabilty, P(x), D(x), E(x))
+```
+"""
+function temporal_variability(x::AbstractVector{<:Real}; w=[0.9, 0.1])
+    return mean([median(x), 1.0 - var(x)], StatsBase.weights(w))
 end
