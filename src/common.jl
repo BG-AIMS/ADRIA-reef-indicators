@@ -3,6 +3,7 @@ using Dates
 using CategoricalArrays
 using NetCDF
 using StatsBase
+using FLoops
 
 using
     CSV,
@@ -1009,7 +1010,7 @@ function bioregion_counts(dataset, bellwether_reefs_col, fn, GCM)
     return removed_bioregions
 end
 
-function naive_split_metric(obs::Vector, n_members::Int, metric::Function=RMSE)
+function naive_split_metric(obs::AbstractVector, n_members::Int, metric::Function=mean)
     obs_chunks = Iterators.partition(obs, n_members)
     scores = Vector{Float64}(undef, ceil(Int64, length(obs) / n_members))
 
@@ -1048,5 +1049,5 @@ julia> temporal_variability(x, temporal_variabilty, P(x), D(x), E(x))
 ```
 """
 function temporal_variability(x::AbstractVector{<:Real}; w=[0.9, 0.1])
-    return mean([median(x), 1.0 - var(x)], StatsBase.weights(w))
+    return mean([mean(x)*w[1], std(x)*w[2]])
 end

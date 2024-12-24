@@ -18,12 +18,18 @@ ADRIA-reef-indicators/
 └─ README.md      # this file
 ```
 
-### Analysis scrips - `src/RME`
-- `RME_initial_runs_remote_desktop.jl` : Script for running RME scenarios on the remote desktop (takes 3 days to run 1200 scenarios).
-- `RME_processing_run_results.jl` : Script for taking the RME results for each GCM and combining them into a single ensemble dataset, then calculating median cover and taxa evenness.
+### Analysis scripts - `src/RME`
+- `rme_1_1_initial_runs_remote_desktop.jl` : Script for running RME scenarios on the remote desktop (takes 3 days to run 1200 scenarios).
+- `rme_1_2_processing_run_results.jl` : Script for taking the RME results for each GCM and combining them into a single ensemble dataset, then calculating median cover and taxa evenness.
 - `rme_2_Subregion_correlation.jl` : Lagged correlation analysis at for bioregions.
 - `rme_3_analysis_context_layers.jl` : Addition of context layers to the correlation results for statistical analysis.
 - `rme_4_exploratory_analysis.jl` : Exploratory analysis of bellwether reefs.
+
+### Data Requirements
+- `raw scenario data` : Raw scenario data resulting from `rme_1_1_initial_runs_remote_desktop.jl` can be found at
+- `processed median data` : Processed data resulting from `rme_1_2_processing_run_results.jl` can be found at https://aimsgovau.sharepoint.com/:f:/s/ADRIADevelopment/EqJeFYVKvadKop2h2sVoUpEBDqlEzVdUDq66hK8KqNvPiw?e=ptVG3c
+- `canonical-reefs gpkg` : Canonical reefs geopackage can be found at _ or created by running _
+- `GBRMPA_Reefal_bioregions.gpkg` : https://aimsgovau.sharepoint.com/:u:/s/ADRIADevelopment/EefReOCyAwVCnhKHLdTPeuYBIiNfoTucyMcV4MgtU9PVbA?e=Yso4uC
 
 ## Methods
 ### Domain

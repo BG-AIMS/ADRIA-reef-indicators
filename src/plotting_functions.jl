@@ -397,8 +397,8 @@ function _axis_size(gdf, x_fig_size, y_fig_size, n_col)
     return xsize, ysize
 end
 
-function _extract_name_and_correlation(df,bellwether_reefs_col, correlation_col)
-    bioregion = first(df.bioregion)
+function _extract_name_and_correlation(df,bellwether_reefs_col, correlation_col, grouping)
+    bioregion = first(df[:, grouping])
     cor = round(mean(df[df[:, bellwether_reefs_col] .== "bellwether", correlation_col]), sigdigits=2)
 
     return "$(bioregion) ($(@sprintf("%.2f",cor)))"
@@ -647,7 +647,7 @@ function grouped_timeseries_plots(
     xticks = timeseries_xticks(length_t, 2022:2099)
     xticks = (1:10:55, ["$(year)" for year in 2025:10:2075])
 
-    labels = label_lines.([_extract_name_and_correlation(df, bellwether_reefs_col, correlation_col) for df in gdf])
+    labels = label_lines.([_extract_name_and_correlation(df, bellwether_reefs_col, correlation_col, grouping) for df in gdf])
 
     for (xi, groupdf) in enumerate(gdf)
         plot_layout_xi = plot_layout[xi]
@@ -659,7 +659,7 @@ function grouped_timeseries_plots(
             DataFrames.Between(Symbol(length_t[1]), Symbol(length_t[2]-lag))
             )
         )'
-        target_reefs_median, target_reefs_lb, target_reefs_ub = bootstrap_median_ts(target_reefs)
+        target_reefs_median, target_reefs_lb, target_reefs_ub = bootstrap_mean_ts(target_reefs)
 
         non_target_reefs = Matrix(
             DataFrames.select(
@@ -671,7 +671,7 @@ function grouped_timeseries_plots(
         #     non_target_reefs_buffer = fill(missing, lag, size(non_target_reefs, 2))
         #     non_target_reefs = vcat(non_target_reefs, non_target_reefs_buffer)
         # end
-        non_target_reefs_median, non_target_reefs_lb, non_target_reefs_ub = bootstrap_median_ts(non_target_reefs)
+        non_target_reefs_median, non_target_reefs_lb, non_target_reefs_ub = bootstrap_mean_ts(non_target_reefs)
 
         ax = _setup_grouped_axes(
             fig,
@@ -1096,6 +1096,23 @@ function bootstrap_median_ts(timeseries)
     end
 
     return ts_median, ts_lb, ts_ub
+end
+
+function bootstrap_mean_ts(timeseries)
+    ts_mean = Vector{Union{Missing, Float64}}(missing, size(timeseries, 1))
+    ts_lb = Vector{Union{Missing, Float64}}(missing, size(timeseries, 1))
+    ts_ub = Vector{Union{Missing, Float64}}(missing, size(timeseries, 1))
+
+    for t in 1:size(timeseries, 1)
+        if all(.!ismissing.(timeseries[t, :]))
+            bootstrap_t = bootstrap(mean, timeseries[t, :], BasicSampling(1000))
+            ts_mean[t] = first(bootstrap_t.t0)
+            ts_lb[t] = getindex(getindex(confint(bootstrap_t, NormalConfInt(0.95)), 1), 2)
+            ts_ub[t] = getindex(getindex(confint(bootstrap_t, NormalConfInt(0.95)), 1), 3)
+        end
+    end
+
+    return ts_mean, ts_lb, ts_ub
 end
 
 function bioregion_grouped_lagged_timeseries(

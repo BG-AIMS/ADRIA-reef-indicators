@@ -54,13 +54,13 @@ for GCM in gcms
     #no_crash_gbr = context_layers[context_layers.UNIQUE_ID .∉ [crash_reefs],:]
     if sum(context_layers[:, "$(GCM)_target_reefs_bior"]) > 1
         # Filter to only include reefs that are within the same bioregion/closest_port subregion as target reefs
-        filtered_bior = context_layers[context_layers.bioregion .∈ [unique(context_layers[context_layers[:, "$(GCM)_target_reefs_bior_cat"] .== "bellwether", :bioregion])], :]
+        filtered_bior = context_layers[context_layers.management_area .∈ [unique(context_layers[context_layers[:, "$(GCM)_target_reefs_bior_cat"] .== "bellwether", :management_area])], :]
         filtered_bior = filtered_bior[.!(ismissing.(filtered_bior[:, "$(GCM)_dhw_species2_cover_cor"])), :]
         filtered_bior[!, "$(GCM)_dhw_species2_cover_cor"] = Float64.(filtered_bior[:, "$(GCM)_dhw_species2_cover_cor"])
         filtered_bior = filtered_bior[filtered_bior.so_to_si .< quantile(filtered_bior.so_to_si, 0.95), :]
         filtered_bior = filtered_bior[filtered_bior.conn_score .< quantile(filtered_bior.conn_score, 0.95), :]
-        filtered_bior = filtered_bior[filtered_bior.bioregion .∈ [unique(filtered_bior[filtered_bior[:, "$(GCM)_target_reefs_bior_cat"] .== "bellwether", :bioregion])], :]
-        filtered_bior = filtered_bior[filtered_bior.bioregion .∈ [unique(filtered_bior[filtered_bior[:, "$(GCM)_target_reefs_bior_cat"] .== "bellwether", :bioregion])], :]
+        filtered_bior = filtered_bior[filtered_bior.bioregion .∈ [unique(filtered_bior[filtered_bior[:, "$(GCM)_target_reefs_bior_cat"] .== "bellwether", :management_area])], :]
+        filtered_bior = filtered_bior[filtered_bior.bioregion .∈ [unique(filtered_bior[filtered_bior[:, "$(GCM)_target_reefs_bior_cat"] .== "bellwether", :management_area])], :]
 
         removed_bioregions = bioregion_counts(
             filtered_bior,
@@ -193,7 +193,7 @@ for GCM in gcms
             rel_cover_reefs,
             "$(GCM)_target_reefs_bior_cat",
             "$(GCM)_lag4_bior",
-            :bioregion,
+            :management_area,
             (1,50), 0;
             ylabel="Total coral cover",
             xlabel="Year"
@@ -215,10 +215,12 @@ for GCM in gcms
             bior_reefs_dhw,
             "$(GCM)_target_reefs_bior_cat",
             "$(GCM)_lag4_bior",
-            :bioregion,
+            :management_area,
             (1,50), 0;
             ylabel="Degree Heating Weeks (°C)",
-            xlabel="Year"
+            xlabel="Year",
+            x_fig_size = 2000,
+            y_fig_size = 700
         )
         save("../figs/$(GCM)/cover_bellwether_dhw_timeseries.png", bior_reefs_dhw_plot)
 
